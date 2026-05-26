@@ -21,13 +21,13 @@ import {
   nextSimulatedFrame,
   nextSimulatedTof,
   nextSimulatedPpg,
+  pushSimulatedIrSample,   // ← NEW: feeds display buffer at 50 ms
   parseBleImu,
   parseBleTof,
   parseBlePpg,
   resetPpgBuffer,
 } from '../services/imuService'
 
-// Helper: decode a BLE DataView to a UTF-8 string
 const decodeValue = (value) => new TextDecoder().decode(value)
 
 export function useImu() {
@@ -37,28 +37,22 @@ export function useImu() {
   const [simulating, setSimulating] = useState(false)
   const [connected, setConnected]   = useState(false)
 
-  // Firmware-reported pitch override (null = use software fallback).
   const [pitchOverride, setPitchOverride] = useState(null)
   const [yaw, setYaw]                     = useState(0)
+  const [bleError, setBleError]           = useState(null)
 
-  // Human-readable error string, or null when healthy.
-  const [bleError, setBleError] = useState(null)
+  const simIntervalRef   = useRef(null)   // IMU  simulation (100 ms)
+  const tofIntervalRef   = useRef(null)   // ToF  simulation (200 ms)
+  const ppgIntervalRef   = useRef(null)   // PPG  simulation (400 ms)
+  const irDisplayRef     = useRef(null)   // IR display buffer feed (50 ms)
+  const bleDeviceRef     = useRef(null)   // BluetoothDevice
 
-  const simIntervalRef = useRef(null)   // IMU simulation setInterval
-  const tofIntervalRef = useRef(null)   // ToF simulation setInterval
-  const ppgIntervalRef = useRef(null)   // PPG simulation setInterval
-  const bleDeviceRef   = useRef(null)   // BluetoothDevice
-
-  // Mirror refs so interval/BLE callbacks always read the latest value
-  // without stale closures.
   const imuRef = useRef(DEFAULT_IMU)
   const tofRef = useRef(DEFAULT_TOF)
   const ppgRef = useRef(DEFAULT_PPG)
   const yawRef = useRef(0)
 
-  // ── BLE yaw integration ───────────────────
-  // Disesuaikan dengan INTERVAL_IMU_MS = 100ms → dt = 0.1 s
-  const BLE_IMU_DT = 0.1   // seconds; must match firmware INTERVAL_IMU_MS / 1000
+  const BLE_IMU_DT = 0.1   // seconds; matches firmware INTERVAL_IMU_MS / 1000
 
   // ── simulation controls ───────────────────
 
@@ -66,8 +60,9 @@ export function useImu() {
     if (simIntervalRef.current) return
     yawRef.current = 0
     setYaw(0)
+    resetPpgBuffer()
 
-    // IMU @ 100 ms — sesuai INTERVAL_IMU_MS firmware
+    // IMU @ 100 ms
     simIntervalRef.current = setInterval(() => {
       const next      = nextSimulatedFrame(imuRef.current)
       const newYaw    = integrateYaw(yawRef.current, next.gyro.z, 0.1)
@@ -84,26 +79,31 @@ export function useImu() {
       setYaw(newYaw)
     }, 100)
 
-    // ToF @ 200 ms — sesuai INTERVAL_TOF_MS firmware
+    // ToF @ 200 ms
     tofIntervalRef.current = setInterval(() => {
       const next = nextSimulatedTof(tofRef.current)
       tofRef.current = next
       setTof(next)
     }, 200)
 
-    // PPG @ 400 ms — sesuai INTERVAL_PPG_MS firmware
-    // Mode simulasi langsung hasilkan BPM tanpa buffer IR
+    // PPG @ 400 ms — updates BPM / fatigue state
     ppgIntervalRef.current = setInterval(() => {
       const next = nextSimulatedPpg(ppgRef.current)
       ppgRef.current = next
       setPpg(next)
     }, 400)
 
+    // IR display @ 50 ms — feeds the oscilloscope display buffer
+    // with a ppg-shaped waveform paced to the current simulated BPM.
+    irDisplayRef.current = setInterval(() => {
+      pushSimulatedIrSample(ppgRef.current.hrBpm || 75)
+    }, 50)
+
     setSimulating(true)
   }, [])
 
   const stopSimulation = useCallback(() => {
-    ;[simIntervalRef, tofIntervalRef, ppgIntervalRef].forEach((r) => {
+    ;[simIntervalRef, tofIntervalRef, ppgIntervalRef, irDisplayRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); r.current = null }
     })
     setSimulating(false)
@@ -136,7 +136,7 @@ export function useImu() {
         setBleError('BLE device disconnected unexpectedly.')
         setConnected(false)
         setPitchOverride(null)
-        resetPpgBuffer()   // bersihkan buffer IR saat koneksi putus
+        resetPpgBuffer()
       })
 
       const server  = await device.gatt.connect()
@@ -147,21 +147,19 @@ export function useImu() {
       setPitchOverride(null)
       setYaw(0)
       yawRef.current = 0
-      resetPpgBuffer()   // bersihkan buffer IR dari sesi sebelumnya
+      resetPpgBuffer()
 
-      // ── Subscribe to IMU notifications ──
+      // ── IMU notifications ──
       const imuChar = await service.getCharacteristic(BLE_CHAR_IMU_UUID)
       await imuChar.startNotifications()
       imuChar.addEventListener('characteristicvaluechanged', (e) => {
         const parsed = parseBleImu(decodeValue(e.target.value))
         if (!parsed) return
 
-        // Integrate yaw dari firmware gyro Z — dt = 0.1 s (100ms interval)
         const newYaw = integrateYaw(yawRef.current, parsed.gyro.z, BLE_IMU_DT)
         yawRef.current = newYaw
         setYaw(newYaw)
 
-        // Merge firmware accel + gyro + fhpStatus ke state (keeps mag).
         const frame = {
           ...imuRef.current,
           accel:     parsed.accel,
@@ -173,7 +171,7 @@ export function useImu() {
         setPitchOverride(parsed.pitch)
       })
 
-      // ── Subscribe to ToF notifications ──
+      // ── ToF notifications ──
       const tofChar = await service.getCharacteristic(BLE_CHAR_TOF_UUID)
       await tofChar.startNotifications()
       tofChar.addEventListener('characteristicvaluechanged', (e) => {
@@ -183,9 +181,9 @@ export function useImu() {
         setTof(parsed)
       })
 
-      // ── Subscribe to PPG notifications ──
-      // parseBlePpg sudah handle semua: push ke buffer IR,
-      // kalkulasi HR, dan kembalikan format {hrBpm, fatigueIndex, fatigueStatus}
+      // ── PPG notifications ──
+      // parseBlePpg handles everything: pushes to both the HR detection buffer
+      // AND the display buffer (pushIrToDisplay), then returns the full PPG state.
       const ppgChar = await service.getCharacteristic(BLE_CHAR_PPG_UUID)
       await ppgChar.startNotifications()
       ppgChar.addEventListener('characteristicvaluechanged', (e) => {
@@ -208,12 +206,12 @@ export function useImu() {
         bleDeviceRef.current.gatt.disconnect()
       }
     } catch {
-      // Ignore – device may already be gone.
+      // Device may already be gone.
     }
     bleDeviceRef.current = null
     setConnected(false)
     setPitchOverride(null)
-    resetPpgBuffer()   // bersihkan buffer IR saat disconnect manual
+    resetPpgBuffer()
   }, [])
 
   const toggleConnection = useCallback(() => {
@@ -236,12 +234,10 @@ export function useImu() {
     setYaw(0)
     setBleError(null)
     setConnected(false)
-    resetPpgBuffer()   // bersihkan buffer IR saat full reset
+    resetPpgBuffer()
   }, [stopSimulation, disconnectBLE])
 
   // ── derived orientation ───────────────────
-  // Roll selalu dari accel. Pitch pakai nilai firmware saat connected,
-  // fallback ke kalkulasi software saat simulasi.
 
   const { roll, pitch: softPitch } = computeAngles(imu.accel)
   const pitch = pitchOverride !== null ? pitchOverride : softPitch
@@ -255,7 +251,6 @@ export function useImu() {
     toggleSimulation,
     toggleConnection,
     reset,
-    /** Inject an external IMU frame directly (WebSocket, etc.) */
     setImu: (frame) => { imuRef.current = frame; setImu(frame) },
   }
 }

@@ -3,41 +3,31 @@
 //  Scrolling PPG waveform on a canvas element,
 //  styled like a CRT phosphor oscilloscope.
 //
+//  Renders the actual IR waveform from imuService's
+//  display buffer — not a synthetic animation.
+//  The buffer is populated by:
+//    • BLE mode:  parseBlePpg() (one sample per 400 ms)
+//    • Sim mode:  pushSimulatedIrSample() (one sample per 50 ms)
+//
 //  Props:
-//    hrBpm – current heart rate (beats per minute)
-//    live  – boolean; true when receiving real/simulated data
+//    live – boolean; true when receiving real/simulated data
 // ─────────────────────────────────────────────
 
 import { useEffect, useRef } from 'react'
+import { getIrDisplaySnapshot, PPG_DISPLAY_WINDOW_MS } from '../services/imuService'
 
 // ── Canvas dimensions ──────────────────────────
-const W = 260   // px
-const H = 88    // px
-
-// ── Circular sample buffer ─────────────────────
-// At ~60 fps each slot ≈ 16.7 ms → 300 slots ≈ 5 s of history.
-// That shows ~6 beats at 75 BPM.
-const BUF = 300
-
-// ── Synthetic PPG shape ────────────────────────
-// Returns amplitude in [0, 1] for a given phase in [0, 1].
-// Models the typical double-hump PPG / plethysmogram profile:
-//   • systolic peak  ≈ 20 % into the cardiac cycle
-//   • dicrotic notch ≈ 45 % (small secondary bump)
-function ppgShape(phase) {
-  const sys = Math.exp(-Math.pow((phase - 0.20) * 11.0, 2))
-  const dic = 0.38 * Math.exp(-Math.pow((phase - 0.46) * 16.0, 2))
-  return Math.max(0, sys + dic)
-}
+const W = 260
+const H = 88
 
 // ── Canvas renderer ────────────────────────────
-function drawFrame(ctx, buf, head, live) {
+function drawFrame(ctx, snapshot, live) {
   // Background
   ctx.fillStyle = '#020d02'
   ctx.fillRect(0, 0, W, H)
 
   // Graticule (oscilloscope grid)
-  ctx.lineWidth = 1
+  ctx.lineWidth   = 1
   ctx.strokeStyle = 'rgba(0,255,80,0.07)'
   for (let col = 1; col < 8; col++) {
     ctx.beginPath()
@@ -52,10 +42,10 @@ function drawFrame(ctx, buf, head, live) {
     ctx.stroke()
   }
 
-  if (!live) {
-    // Flat isoelectric line when idle
+  // Flat isoelectric line when idle or no signal
+  if (!live || !snapshot || snapshot.length < 2) {
     ctx.strokeStyle = 'rgba(0,255,80,0.28)'
-    ctx.lineWidth = 1.5
+    ctx.lineWidth   = 1.5
     ctx.beginPath()
     ctx.moveTo(0, H * 0.82)
     ctx.lineTo(W, H * 0.82)
@@ -63,19 +53,29 @@ function drawFrame(ctx, buf, head, live) {
     return
   }
 
-  // Build the waveform path once, then stroke twice (glow + main)
+  // ── Map timestamps to x-axis ──────────────────
+  // The display window spans PPG_DISPLAY_WINDOW_MS.
+  // x=0 is the oldest edge, x=W is "now".
+  const now    = Date.now()
+  const tStart = now - PPG_DISPLAY_WINDOW_MS
+
+  const toX = (t) => ((t - tStart) / PPG_DISPLAY_WINDOW_MS) * W
+  // y=0 is top; amplitude occupies 10 %–88 % of canvas height
+  const toY = (v) => H * 0.88 - v * H * 0.78
+
+  // Build the path once, draw twice (glow + crisp trace)
   const tracePath = () => {
     ctx.beginPath()
-    for (let i = 0; i < BUF; i++) {
-      const sample = buf[(head + i) % BUF]
-      const x = (i / (BUF - 1)) * W
-      // Amplitude occupies 10 %–88 % of canvas height; y-axis inverted
-      const y = H * 0.88 - sample * H * 0.78
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    let started = false
+    for (const { t, vNorm } of snapshot) {
+      const x = toX(t)
+      const y = toY(vNorm)
+      if (!started) { ctx.moveTo(x, y); started = true }
+      else          { ctx.lineTo(x, y) }
     }
   }
 
-  // Glow layer (soft halo)
+  // Glow layer
   ctx.save()
   ctx.strokeStyle = 'rgba(0,255,85,0.22)'
   ctx.lineWidth   = 5
@@ -94,56 +94,41 @@ function drawFrame(ctx, buf, head, live) {
   tracePath()
   ctx.stroke()
   ctx.restore()
+
+  // ── Leading-edge dot (scan-head indicator) ────
+  const last = snapshot[snapshot.length - 1]
+  const dotX = toX(last.t)
+  const dotY = toY(last.vNorm)
+  if (dotX >= 0 && dotX <= W) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(dotX, dotY, 3, 0, Math.PI * 2)
+    ctx.fillStyle   = '#00ff55'
+    ctx.shadowColor = '#00ff55'
+    ctx.shadowBlur  = 8
+    ctx.fill()
+    ctx.restore()
+  }
 }
 
 // ── Component ──────────────────────────────────
-export function BpmOscilloscope({ hrBpm, live }) {
+export function BpmOscilloscope({ live }) {
   const canvasRef = useRef(null)
+  const liveRef   = useRef(live)
 
-  // All mutable oscilloscope state lives here to avoid stale closures
-  // and unnecessary re-renders.
-  const stRef = useRef({
-    buf:     new Float32Array(BUF).fill(0),
-    head:    0,
-    tAccum:  0,
-    lastNow: null,
-  })
+  useEffect(() => { liveRef.current = live }, [live])
 
-  // Keep a ref to props so the rAF closure always reads fresh values
-  // without depending on them as effect dependencies.
-  const prRef = useRef({ hrBpm, live })
-  useEffect(() => {
-    prRef.current = { hrBpm, live }
-    // Reset time accumulator when stopping so the next start is clean
-    if (!live) stRef.current.tAccum = 0
-  }, [hrBpm, live])
-
-  // Start the render loop once on mount; tear down on unmount.
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx    = canvas.getContext('2d')
     let raf
 
-    const tick = (now) => {
+    const tick = () => {
       raf = requestAnimationFrame(tick)
-      const st            = stRef.current
-      const { hrBpm: bpm, live: isLive } = prRef.current
-
-      // Delta time (capped to avoid large jumps after tab-switch)
-      if (st.lastNow === null) st.lastNow = now
-      const dt      = Math.min((now - st.lastNow) / 1000, 0.1)
-      st.lastNow    = now
-
-      if (isLive && bpm > 0) {
-        st.tAccum        += dt
-        const period      = 60 / bpm           // seconds per beat
-        const phase       = (st.tAccum % period) / period
-        const sample      = ppgShape(phase)
-        st.buf[st.head % BUF] = sample
-        st.head++
-      }
-
-      drawFrame(ctx, st.buf, st.head % BUF, isLive)
+      // Read the latest normalized snapshot from the service's display buffer.
+      // Returns null when there is no AC signal (flat / no contact / idle).
+      const snapshot = liveRef.current ? getIrDisplaySnapshot() : null
+      drawFrame(ctx, snapshot, liveRef.current)
     }
 
     raf = requestAnimationFrame(tick)
@@ -157,7 +142,6 @@ export function BpmOscilloscope({ hrBpm, live }) {
         <span className="font-normal opacity-60"> Oscilloscope</span>
       </span>
 
-      {/* Rounded border matching the rest of the UI */}
       <div
         className="rounded-md overflow-hidden border border-[var(--border)]"
         style={{ display: 'inline-block', lineHeight: 0 }}

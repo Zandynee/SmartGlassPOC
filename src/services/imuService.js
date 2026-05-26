@@ -10,7 +10,7 @@ export const BLE_SERVICE_UUID  = '19b10000-e8f2-537e-4f6c-d104768a1214'
 export const BLE_CHAR_TOF_UUID = '19b10001-e8f2-537e-4f6c-d104768a1214'
 export const BLE_CHAR_IMU_UUID = '19b10002-e8f2-537e-4f6c-d104768a1214'
 export const BLE_CHAR_PPG_UUID = '19b10003-e8f2-537e-4f6c-d104768a1214'
-  
+
 // ── Default sensor states ─────────────────────
 
 /** Default IMU state (at rest, z-up) */
@@ -29,14 +29,16 @@ export const DEFAULT_TOF = {
 
 /**
  * Default PPG state.
- * Format tetap sama (hrBpm, fatigueIndex, fatigueStatus) agar
- * PpgReadings.jsx tidak perlu diubah — kalkulasi selesai di sini
- * sebelum state disebarkan ke komponen.
+ * Includes raw sensor values (irRaw, redRaw) plus derived metrics.
+ * hrDetectable === false means the buffer lacks enough beats to compute BPM.
  */
 export const DEFAULT_PPG = {
   hrBpm:         0,
   fatigueIndex:  0,
   fatigueStatus: 'UNKNOWN',
+  irRaw:         0,       // Latest raw IR ADC value from MAX30102
+  redRaw:        0,       // Latest raw Red ADC value from MAX30102
+  hrDetectable:  false,   // true only when BPM has been successfully calculated
 }
 
 // ── helpers ───────────────────────────────────
@@ -45,7 +47,6 @@ const toDeg = (rad) => (rad * 180) / Math.PI
 
 /**
  * Compute roll & pitch (degrees) from accelerometer vector.
- * Uses the standard atan2 / atan tilt formulas.
  */
 export function computeAngles(accel) {
   const { x, y, z } = accel
@@ -65,96 +66,194 @@ export function integrateYaw(prevYaw, gyroZ, dt = 0.1) {
   return yaw
 }
 
-// ── PPG: IR buffer & HR kalkulasi ────────────
+// ── PPG shape helper (used for simulation) ────
 //
-//  Firmware kirim raw IR setiap 400ms.
-//  Kita simpan ~5 detik history (= 12–13 sampel) lalu
-//  deteksi peak untuk estimasi BPM.
+// Returns amplitude in [0, 1] for a given phase in [0, 1].
+// Models the double-hump PPG profile:
+//   • systolic peak  ≈ 20 % into the cardiac cycle
+//   • dicrotic notch ≈ 46 % (small secondary bump)
+function _ppgShape(phase) {
+  const sys = Math.exp(-Math.pow((phase - 0.20) * 11.0, 2))
+  const dic = 0.38 * Math.exp(-Math.pow((phase - 0.46) * 16.0, 2))
+  return Math.max(0, sys + dic)
+}
+
+// ── PPG: IR ring buffer & HR calculation ──────
 //
-//  Pendekatan: zero-crossing naik terhadap nilai rata-rata
-//  (sama dengan logika di firmware sebelumnya, tapi di JS
-//  kita punya buffer history lintas beberapa panggilan).
+//  Firmware sends raw IR every 400 ms.
+//  We store up to PPG_IR_BUFFER_SIZE samples with timestamps,
+//  then use rising zero-crossing timing to estimate BPM.
+//
+//  Minimum required: 5 samples (~2 s) for first reading.
+//  Full buffer: 13 samples (~5 s) for stable reading.
 
-const PPG_IR_BUFFER_SIZE      = 13    // ~5 detik @ 400ms per sampel
-const PPG_IR_CONTACT_MIN      = 50000 // IR minimum untuk deteksi kontak kulit
-const PPG_FATIGUE_HR_THRESHOLD = 90   // BPM di atas ini = elevated
+const PPG_IR_BUFFER_SIZE      = 13    // ~5 s @ 400 ms per sample
+const PPG_IR_CONTACT_MIN      = 50000 // Minimum IR for skin-contact detection
+const PPG_FATIGUE_HR_THRESHOLD = 90   // BPM above this = elevated HR
 
-/** Ring buffer internal untuk sampel IR — tidak diekspos keluar. */
-const _irBuffer  = new Array(PPG_IR_BUFFER_SIZE).fill(0)
-let   _irHead    = 0       // indeks tulis berikutnya
-let   _irCount   = 0       // berapa sampel sudah masuk (max = PPG_IR_BUFFER_SIZE)
+const _irBuffer     = new Array(PPG_IR_BUFFER_SIZE).fill(0)
+const _irTimestamps = new Array(PPG_IR_BUFFER_SIZE).fill(0)
+let   _irHead       = 0   // Next write index
+let   _irCount      = 0   // Samples stored so far (max = PPG_IR_BUFFER_SIZE)
 
-/** Reset buffer saat disconnect / reset. */
-export function resetPpgBuffer() {
-  _irBuffer.fill(0)
-  _irHead  = 0
-  _irCount = 0
+// ── PPG: scrolling display buffer (for oscilloscope) ──────────────────
+//
+//  Separate from the HR detection buffer.
+//  Stores raw IR values with wall-clock timestamps so the oscilloscope
+//  can render a true time-axis waveform regardless of sampling rate.
+//
+//  Window: last 8 seconds of data.
+//  At 20 Hz (50 ms simulation interval) ≈ 160 entries max.
+//  At 2.5 Hz (400 ms BLE interval)      ≈  20 entries max.
+
+const PPG_DISPLAY_WINDOW_MS = 8000
+export { PPG_DISPLAY_WINDOW_MS }
+
+/** @type {{ t: number, v: number }[]} */
+const _displaySamples = []
+
+/** Push one IR value into the scrolling display window. */
+export function pushIrToDisplay(irValue) {
+  const now    = Date.now()
+  const cutoff = now - PPG_DISPLAY_WINDOW_MS
+  // Trim entries older than the window (front = oldest).
+  let trimTo = 0
+  while (trimTo < _displaySamples.length && _displaySamples[trimTo].t < cutoff) trimTo++
+  if (trimTo > 0) _displaySamples.splice(0, trimTo)
+  _displaySamples.push({ t: now, v: irValue })
 }
 
 /**
- * Masukkan satu sampel IR baru ke ring buffer.
- * Dipanggil tiap kali BLE PPG notification datang.
+ * Returns a normalized snapshot of the display window for the oscilloscope,
+ * or null when there is no meaningful AC signal.
+ *
+ * Each entry: { t: timestamp_ms, vNorm: 0–1 }
  */
+export function getIrDisplaySnapshot() {
+  if (_displaySamples.length < 2) return null
+
+  let min = Infinity, max = -Infinity
+  for (const s of _displaySamples) {
+    if (s.v < min) min = s.v
+    if (s.v > max) max = s.v
+  }
+
+  const range = max - min
+  // < 500 raw ADC counts → flat noise, not a real pulse waveform
+  if (range < 500) return null
+
+  return _displaySamples.map(s => ({ t: s.t, vNorm: (s.v - min) / range }))
+}
+
+// ── PPG simulation state ──────────────────────
+let _simPhase = 0   // Current phase within the cardiac cycle [0, 1)
+
+/**
+ * Advance the simulation phase by one 50 ms step and push a synthetic
+ * IR sample into the display buffer.
+ * Call this from useImu's 50 ms IR-simulation interval.
+ */
+export function pushSimulatedIrSample(bpm) {
+  const safeBpm = Math.max(40, bpm)
+  const period  = 60 / safeBpm           // seconds per beat
+  _simPhase     = (_simPhase + 0.05 / period) % 1   // 50 ms step
+
+  // Realistic IR range: baseline ~80 000 + AC component ~18 000
+  const shape   = _ppgShape(_simPhase)
+  const irValue = Math.round(80000 + 18000 * shape)
+  pushIrToDisplay(irValue)
+  return irValue
+}
+
+/** Reset all PPG buffers (call on disconnect / full reset). */
+export function resetPpgBuffer() {
+  _irBuffer.fill(0)
+  _irTimestamps.fill(0)
+  _irHead  = 0
+  _irCount = 0
+  _displaySamples.length = 0
+  _simPhase = 0
+}
+
+/** Push one IR detection sample into the HR ring buffer with its timestamp. */
 function _pushIr(irValue) {
-  _irBuffer[_irHead % PPG_IR_BUFFER_SIZE] = irValue
-  _irHead  = (_irHead + 1) % PPG_IR_BUFFER_SIZE
+  const idx = _irHead % PPG_IR_BUFFER_SIZE
+  _irBuffer[idx]     = irValue
+  _irTimestamps[idx] = Date.now()
+  _irHead = (_irHead + 1) % PPG_IR_BUFFER_SIZE
   if (_irCount < PPG_IR_BUFFER_SIZE) _irCount++
 }
 
 /**
- * Hitung estimasi HR dari ring buffer IR saat ini.
+ * Estimate HR from the ring buffer using rising zero-crossing timestamps.
  *
- * Algoritma:
- *  1. Ambil snapshot buffer sesuai urutan kronologis
- *  2. Hitung rata-rata sebagai DC baseline
- *  3. Hitung zero-crossing naik (bawah→atas rata-rata) = satu beat
- *  4. Konversi jumlah beat ke BPM
- *     — durasi buffer = _irCount × 0.4 detik (INTERVAL_PPG_MS)
+ * Algorithm:
+ *  1. Build a chronological snapshot (oldest → newest) with real timestamps.
+ *  2. Compute the mean as DC baseline.
+ *  3. Record the interpolated timestamp of each below→above crossing.
+ *  4. Average the crossing intervals → BPM.
  *
- * Kembalikan null jika buffer belum penuh atau tidak ada kontak.
+ * Returns null when the buffer has too few samples or beats are out of
+ * physiological range. Returns { bpm, detectable: true } on success.
  */
 function _calculateHrFromBuffer() {
-  if (_irCount < PPG_IR_BUFFER_SIZE) return null   // tunggu buffer penuh dulu
+  // Require at least 5 samples (~2 s) before showing any reading.
+  if (_irCount < 5) return null
 
-  // Susun snapshot kronologis dari ring buffer
-  const snapshot = []
-  const start = _irHead  // _irHead sekarang menunjuk ke slot tertua
-  for (let i = 0; i < PPG_IR_BUFFER_SIZE; i++) {
-    snapshot.push(_irBuffer[(start + i) % PPG_IR_BUFFER_SIZE])
+  const n        = Math.min(_irCount, PPG_IR_BUFFER_SIZE)
+  // When the buffer is not yet full, the oldest entry is at index 0.
+  // When it is full, _irHead points to the next-write slot (= oldest slot).
+  const startIdx = _irCount < PPG_IR_BUFFER_SIZE ? 0 : _irHead
+
+  const samples = []
+  const times   = []
+  for (let i = 0; i < n; i++) {
+    const idx = (startIdx + i) % PPG_IR_BUFFER_SIZE
+    samples.push(_irBuffer[idx])
+    times.push(_irTimestamps[idx])
   }
 
-  // DC baseline
-  const mean = snapshot.reduce((s, v) => s + v, 0) / snapshot.length
+  // Skip if all timestamps are 0 (buffer freshly reset but count not yet cleared)
+  if (times[0] === 0) return null
 
-  // Deteksi zero-crossing naik
-  let beats    = 0
-  let wasBelow = snapshot[0] < mean
-  for (let i = 1; i < snapshot.length; i++) {
-    const isBelow = snapshot[i] < mean
-    if (wasBelow && !isBelow) beats++
+  const mean = samples.reduce((s, v) => s + v, 0) / samples.length
+
+  // Collect interpolated crossing timestamps
+  const crossTimes = []
+  let wasBelow = samples[0] < mean
+  for (let i = 1; i < samples.length; i++) {
+    const isBelow = samples[i] < mean
+    if (wasBelow && !isBelow) {
+      // Linear interpolation between the two adjacent timestamps
+      const frac = (mean - samples[i - 1]) / (samples[i] - samples[i - 1])
+      crossTimes.push(times[i - 1] + frac * (times[i] - times[i - 1]))
+    }
     wasBelow = isBelow
   }
 
-  // Durasi buffer dalam menit
-  const durationMin = (PPG_IR_BUFFER_SIZE * 0.4) / 60
-  const bpm = beats / durationMin
+  if (crossTimes.length < 2) return null
 
-  // Validasi rentang fisiologis
+  // Average peak-to-peak interval using actual wall-clock deltas
+  let totalMs = 0
+  for (let i = 1; i < crossTimes.length; i++) totalMs += crossTimes[i] - crossTimes[i - 1]
+  const avgIntervalMs = totalMs / (crossTimes.length - 1)
+  const bpm           = 60000 / avgIntervalMs
+
   if (bpm < 40 || bpm > 200) return null
   return bpm
 }
 
 /**
- * Hitung fatigue index (0–100) dari BPM.
- * HR normal → indeks rendah; HR elevated → indeks naik.
+ * Map a BPM to a fatigue index (0–100).
+ * Normal HR → low index; elevated HR → index rises toward 100.
  */
 function _calculateFatigueIndex(bpm) {
   if (bpm <= PPG_FATIGUE_HR_THRESHOLD) {
     const ratio = Math.max(0, (bpm - 40) / (PPG_FATIGUE_HR_THRESHOLD - 40))
-    return Math.round(ratio * 30)           // 0–30 di zona normal
+    return Math.round(ratio * 30)
   }
   const ratio = Math.min(1, (bpm - PPG_FATIGUE_HR_THRESHOLD) / (200 - PPG_FATIGUE_HR_THRESHOLD))
-  return Math.round(30 + ratio * 70)        // 30–100 di zona elevated
+  return Math.round(30 + ratio * 70)
 }
 
 // ── BLE characteristic parsers ────────────────
@@ -162,8 +261,6 @@ function _calculateFatigueIndex(bpm) {
 /**
  * Parse the IMU JSON characteristic from the firmware.
  * Format: {"pitch_deg":X,"ax":X,"ay":X,"az":X,"gx":X,"gy":X,"gz":X,"fhp_status":"NORMAL"}
- *
- * Returns { pitch, accel, gyro, fhpStatus } or null on parse failure.
  */
 export function parseBleImu(raw) {
   try {
@@ -183,8 +280,6 @@ export function parseBleImu(raw) {
 /**
  * Parse the ToF JSON characteristic from the firmware.
  * Format: {"distance_cm":X,"status":"OK"}
- *
- * Returns { distanceCm, status } or null on parse failure.
  */
 export function parseBleTof(raw) {
   try {
@@ -200,19 +295,15 @@ export function parseBleTof(raw) {
 }
 
 /**
- * Parse the PPG JSON characteristic dari firmware (raw IR/Red).
- * Format firmware: {"ir":X,"red":X,"contact_status":"CONTACT"}
+ * Parse the PPG JSON characteristic from the firmware.
+ * Format: {"ir":X,"red":X,"contact_status":"CONTACT"}
  *
- * Alur:
- *  1. Parse raw JSON dari firmware
- *  2. Cek kontak kulit dari contact_status dan nilai IR
- *  3. Push IR ke ring buffer
- *  4. Kalkulasi HR dari buffer (null jika belum cukup data)
- *  5. Kembalikan format yang sama dengan DEFAULT_PPG
- *     (hrBpm, fatigueIndex, fatigueStatus) agar PpgReadings.jsx
- *     tidak perlu diubah sama sekali.
- *
- * Returns { hrBpm, fatigueIndex, fatigueStatus } atau null pada parse failure.
+ * Flow:
+ *  1. Parse JSON.
+ *  2. Check skin contact (contact_status + IR threshold).
+ *  3. Push IR into the HR ring buffer AND the display buffer.
+ *  4. Calculate HR from real timestamps.
+ *  5. Return a PPG state object with raw values + derived metrics.
  */
 export function parseBlePpg(raw) {
   try {
@@ -220,28 +311,37 @@ export function parseBlePpg(raw) {
     if (d.ir === undefined) return null
 
     const irValue       = d.ir
+    const redValue      = d.red ?? 0
     const contactStatus = d.contact_status ?? 'UNKNOWN'
 
-    // Tidak ada kontak kulit → kosongkan buffer, kembalikan UNKNOWN
+    // No skin contact → clear buffers, return NO_CONTACT
     if (contactStatus === 'NO_CONTACT' || irValue < PPG_IR_CONTACT_MIN) {
       resetPpgBuffer()
       return {
         hrBpm:         0,
         fatigueIndex:  0,
         fatigueStatus: 'NO_CONTACT',
+        irRaw:         irValue,
+        redRaw:        redValue,
+        hrDetectable:  false,
       }
     }
 
-    // Push ke buffer dan coba kalkulasi HR
+    // Feed both buffers
     _pushIr(irValue)
+    pushIrToDisplay(irValue)
+
     const bpm = _calculateHrFromBuffer()
 
-    // Buffer belum penuh — kembalikan UNKNOWN sementara
     if (bpm === null) {
+      // Buffer accumulating — not enough data yet
       return {
         hrBpm:         0,
         fatigueIndex:  0,
         fatigueStatus: 'UNKNOWN',
+        irRaw:         irValue,
+        redRaw:        redValue,
+        hrDetectable:  false,
       }
     }
 
@@ -252,6 +352,9 @@ export function parseBlePpg(raw) {
       hrBpm:         bpm,
       fatigueIndex,
       fatigueStatus,
+      irRaw:         irValue,
+      redRaw:        redValue,
+      hrDetectable:  true,
     }
   } catch {
     return null
@@ -260,12 +363,6 @@ export function parseBlePpg(raw) {
 
 // ── Legacy Web Serial parser (kept for reference) ─
 
-/**
- * Parse one line of MPU-6050 firmware output (Web Serial mode).
- *
- * Expected format (115200 baud, Arduino sketch):
- *   "Pitch: 15.3 Roll: -4.1 Yaw: 90.2 | ax: 0.123 ay: -0.456 az: 0.987 gx: 1.2 gy: -0.5 gz: 0.3"
- */
 export function parseFirmwareLine(line) {
   const pitchM = line.match(/Pitch:\s*([-\d.]+)/)
   const rollM  = line.match(/Roll:\s*([-\d.]+)/)
@@ -298,7 +395,6 @@ export function parseFirmwareLine(line) {
 
 // ── simulation ────────────────────────────────
 
-/** Generate a single random IMU sample. */
 export function randomImuSample() {
   return {
     accel: {
@@ -319,12 +415,8 @@ export function randomImuSample() {
   }
 }
 
-/**
- * Blend previous state toward a new random sample.
- * α controls how "smooth" the walk is (lower = smoother).
- */
 export function blendImu(prev, next, α = { accel: 0.2, gyro: 0.2, mag: 0.1 }) {
-  const lerp = (a, b, t) => a * (1 - t) + b * t
+  const lerp      = (a, b, t) => a * (1 - t) + b * t
   const blendAxis = (p, n, t) => ({
     x: lerp(p.x, n.x, t),
     y: lerp(p.y, n.y, t),
@@ -338,12 +430,10 @@ export function blendImu(prev, next, α = { accel: 0.2, gyro: 0.2, mag: 0.1 }) {
   }
 }
 
-/** Produce the next simulated IMU frame from the previous one. */
 export function nextSimulatedFrame(prev) {
   return blendImu(prev, randomImuSample())
 }
 
-/** Produce a simulated ToF reading (10–50 cm random walk). */
 export function nextSimulatedTof(prev) {
   const delta      = (Math.random() - 0.5) * 6
   const raw        = (prev?.distanceCm ?? 30) + delta
@@ -352,18 +442,30 @@ export function nextSimulatedTof(prev) {
 }
 
 /**
- * Produce a simulated PPG reading (60–100 BPM random walk).
- * Mode simulasi tidak pakai buffer IR — langsung hasilkan BPM
- * agar UI tetap responsif saat tidak ada hardware.
+ * Produce a simulated PPG state (400 ms tick).
+ * Includes synthetic irRaw / redRaw so the raw-values UI
+ * shows plausible numbers even without hardware.
+ *
+ * Note: the display-buffer waveform is driven by pushSimulatedIrSample()
+ * at 50 ms in the hook — NOT by this function — to get a smooth oscilloscope.
  */
 export function nextSimulatedPpg(prev) {
   const hrDelta      = (Math.random() - 0.5) * 4
   const fatigueDelta = (Math.random() - 0.5) * 6
   const hrBpm        = Math.min(100, Math.max(60, (prev?.hrBpm ?? 75) + hrDelta))
   const fatigueIndex = Math.min(100, Math.max(0,  (prev?.fatigueIndex ?? 30) + fatigueDelta))
+
+  // Simulate plausible raw ADC values for display
+  const shape  = _ppgShape(_simPhase)   // _simPhase is advanced by pushSimulatedIrSample
+  const irRaw  = Math.round(80000 + 18000 * shape)
+  const redRaw = Math.round(62000 + 14000 * shape)
+
   return {
     hrBpm,
     fatigueIndex,
     fatigueStatus: fatigueIndex > 75 ? 'FATIGUED' : 'FRESH',
+    irRaw,
+    redRaw,
+    hrDetectable:  true,
   }
 }
