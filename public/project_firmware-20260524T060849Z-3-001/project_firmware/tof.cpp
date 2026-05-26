@@ -21,8 +21,9 @@ bool tofInit() {
     return false;
   }
 
-  // Mode high accuracy — lebih lambat tapi presisi untuk jarak < 1.2m
-  _sensor.setMeasurementTimingBudget(200000); // 200ms per pengukuran
+  // Mode balanced — 20ms budget cocok untuk polling 50ms (20 Hz)
+  // Akurasi sedikit berkurang (~±3 mm) tapi masih lebih dari cukup untuk deteksi postur
+  _sensor.setMeasurementTimingBudget(20000);  // 20ms per pengukuran
 
   _initialized = true;
   Serial.println("[TOF] Sensor siap.");

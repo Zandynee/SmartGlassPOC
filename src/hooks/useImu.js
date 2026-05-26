@@ -52,7 +52,7 @@ export function useImu() {
   const ppgRef = useRef(DEFAULT_PPG)
   const yawRef = useRef(0)
 
-  const BLE_IMU_DT = 0.1   // seconds; matches firmware INTERVAL_IMU_MS / 1000
+  const BLE_IMU_DT = 0.02  // seconds; matches firmware INTERVAL_IMU_MS / 1000
 
   // ── simulation controls ───────────────────
 
@@ -62,10 +62,10 @@ export function useImu() {
     setYaw(0)
     resetPpgBuffer()
 
-    // IMU @ 100 ms
+    // IMU @ 20 ms
     simIntervalRef.current = setInterval(() => {
       const next      = nextSimulatedFrame(imuRef.current)
-      const newYaw    = integrateYaw(yawRef.current, next.gyro.z, 0.1)
+      const newYaw    = integrateYaw(yawRef.current, next.gyro.z, 0.02)
       const { pitch } = computeAngles(next.accel)
       const frame     = {
         ...next,
@@ -77,27 +77,27 @@ export function useImu() {
 
       setImu(frame)
       setYaw(newYaw)
-    }, 100)
+    }, 20)
 
-    // ToF @ 200 ms
+    // ToF @ 50 ms
     tofIntervalRef.current = setInterval(() => {
       const next = nextSimulatedTof(tofRef.current)
       tofRef.current = next
       setTof(next)
-    }, 200)
+    }, 50)
 
-    // PPG @ 400 ms — updates BPM / fatigue state
+    // PPG @ 100 ms — updates BPM / fatigue state
     ppgIntervalRef.current = setInterval(() => {
       const next = nextSimulatedPpg(ppgRef.current)
       ppgRef.current = next
       setPpg(next)
-    }, 400)
+    }, 100)
 
-    // IR display @ 50 ms — feeds the oscilloscope display buffer
+    // IR display @ 20 ms — feeds the oscilloscope display buffer
     // with a ppg-shaped waveform paced to the current simulated BPM.
     irDisplayRef.current = setInterval(() => {
       pushSimulatedIrSample(ppgRef.current.hrBpm || 75)
-    }, 50)
+    }, 20)
 
     setSimulating(true)
   }, [])

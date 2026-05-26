@@ -26,9 +26,9 @@
 // ─────────────────────────────────────────
 //  Konfigurasi interval pembacaan sensor
 // ─────────────────────────────────────────
-#define INTERVAL_TOF_MS   2   // Baca ToF setiap 500ms
-#define INTERVAL_IMU_MS   100    // Baca IMU setiap 500ms
-#define INTERVAL_PPG_MS   400    // Baca PPG setiap 500ms (non-blocking, raw data)
+#define INTERVAL_TOF_MS   50     // Baca ToF setiap 50ms  (20 Hz)
+#define INTERVAL_IMU_MS   20     // Baca IMU setiap 20ms  (50 Hz)
+#define INTERVAL_PPG_MS   100    // Baca PPG setiap 100ms (10 Hz, non-blocking, raw data)
 
 // ─────────────────────────────────────────
 //  BLE Service & Characteristics

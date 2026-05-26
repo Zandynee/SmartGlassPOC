@@ -80,14 +80,14 @@ function _ppgShape(phase) {
 
 // ── PPG: IR ring buffer & HR calculation ──────
 //
-//  Firmware sends raw IR every 400 ms.
+//  Firmware sends raw IR every 100 ms.
 //  We store up to PPG_IR_BUFFER_SIZE samples with timestamps,
 //  then use rising zero-crossing timing to estimate BPM.
 //
-//  Minimum required: 5 samples (~2 s) for first reading.
-//  Full buffer: 13 samples (~5 s) for stable reading.
+//  Minimum required: 5 samples (~0.5 s) for first reading.
+//  Full buffer: 30 samples (~3 s) for stable reading.
 
-const PPG_IR_BUFFER_SIZE      = 13    // ~5 s @ 400 ms per sample
+const PPG_IR_BUFFER_SIZE      = 30    // ~3 s @ 100 ms per sample
 const PPG_IR_CONTACT_MIN      = 50000 // Minimum IR for skin-contact detection
 const PPG_FATIGUE_HR_THRESHOLD = 90   // BPM above this = elevated HR
 
@@ -103,8 +103,8 @@ let   _irCount      = 0   // Samples stored so far (max = PPG_IR_BUFFER_SIZE)
 //  can render a true time-axis waveform regardless of sampling rate.
 //
 //  Window: last 8 seconds of data.
-//  At 20 Hz (50 ms simulation interval) ≈ 160 entries max.
-//  At 2.5 Hz (400 ms BLE interval)      ≈  20 entries max.
+//  At 50 Hz (20 ms simulation interval) ≈ 400 entries max.
+//  At 10 Hz (100 ms BLE interval)       ≈  80 entries max.
 
 const PPG_DISPLAY_WINDOW_MS = 8000
 export { PPG_DISPLAY_WINDOW_MS }
@@ -156,7 +156,7 @@ let _simPhase = 0   // Current phase within the cardiac cycle [0, 1)
 export function pushSimulatedIrSample(bpm) {
   const safeBpm = Math.max(40, bpm)
   const period  = 60 / safeBpm           // seconds per beat
-  _simPhase     = (_simPhase + 0.05 / period) % 1   // 50 ms step
+  _simPhase     = (_simPhase + 0.02 / period) % 1   // 20 ms step
 
   // Realistic IR range: baseline ~80 000 + AC component ~18 000
   const shape   = _ppgShape(_simPhase)
