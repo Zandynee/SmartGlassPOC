@@ -214,7 +214,7 @@ export function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
   }, [])
 
   return (
-    <div style={{ position: 'relative', width: '40%', height: 340 }}>
+    <div style={{ position: 'relative', width: '100%', height: 340 }}>
       <div
         ref={mountRef}
         style={{ width: '100%', height: '100%' }}

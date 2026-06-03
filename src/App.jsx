@@ -3,7 +3,7 @@
 //  Composes hook + components. Zero inline logic.
 // ─────────────────────────────────────────────
 
-import { useImu }        from './hooks/useImu'
+import { useSensors }    from './hooks/useSensors'
 import { Controls }      from './components/Controls'
 import { ImuReadings }   from './components/ImuReadings'
 import { ImuVisualizer } from './components/ImuVisualizer'
@@ -13,14 +13,11 @@ import { PpgReadings }   from './components/PpgReadings'
 const bleSupported =
   typeof navigator !== 'undefined' && 'bluetooth' in navigator
 
-function SectionDivider({ label }) {
+function SectionLabel({ label }) {
   return (
-    <div className="flex items-center gap-3 my-5">
-      <span className="text-[10px] font-mono font-semibold uppercase tracking-widest opacity-40">
-        {label}
-      </span>
-      <div className="flex-1 h-px bg-[var(--border)]" />
-    </div>
+    <p className="text-[10px] font-mono font-semibold uppercase tracking-widest opacity-40 mb-3">
+      {label}
+    </p>
   )
 }
 
@@ -34,13 +31,13 @@ function App() {
     toggleSimulation,
     toggleConnection,
     reset,
-  } = useImu()
+  } = useSensors()
 
   const live = connected || simulating
 
   return (
-    <main className="px-6 pt-8 pb-10 max-w-3xl text-left">
-      <h1>Smart Glasses Monitor</h1>
+    <main className="px-6 pt-8 pb-10 text-left">
+      <h1>VisioGuard Monitor</h1>
 
       <Controls
         connected={connected}
@@ -52,18 +49,33 @@ function App() {
         onReset={reset}
       />
 
-      {/* ── IMU + 3-D visualizer ── */}
-      <SectionDivider label="IMU · Inertial Measurement" />
-      <div className="flex flex-row gap-6">
-        <ImuReadings imu={imu} roll={roll} pitch={pitch} yaw={yaw} live={live} />
-        <ImuVisualizer roll={roll} pitch={pitch} yaw={yaw} simulating={simulating} />
-      </div>
+      {/* ── Divider ── */}
+      <div className="h-px bg-[var(--border)] my-6" />
 
-      {/* ── ToF + PPG side by side ── */}
-      <SectionDivider label="ToF · Distance  /  PPG · Biometrics" />
-      <div className="flex flex-row gap-10">
-        <TofReadings tof={tof} live={live} />
-        <PpgReadings ppg={ppg} live={live} />
+      {/* ── Tiga kolom bersebelahan: IMU Readings | IMU Visualizer | ToF + PPG ── */}
+      <div className="flex flex-row gap-6 items-start">
+
+        {/* Kolom 1 — IMU Readings */}
+        <div className="flex-1 min-w-0">
+          <SectionLabel label="IMU · Inertial Measurement" />
+          <ImuReadings imu={imu} roll={roll} pitch={pitch} yaw={yaw} live={live} />
+        </div>
+
+        {/* Kolom 2 — IMU Visualizer (3-D) */}
+        <div className="flex-1 min-w-0">
+          <SectionLabel label="IMU · 3D Visualizer" />
+          <ImuVisualizer roll={roll} pitch={pitch} yaw={yaw} simulating={simulating} />
+        </div>
+
+        {/* Kolom 3 — ToF + PPG */}
+        <div className="flex-1 min-w-0">
+          <SectionLabel label="ToF · Distance  /  PPG · Biometrics" />
+          <div className="flex flex-col gap-6">
+            <TofReadings tof={tof} live={live} />
+            <PpgReadings ppg={ppg} live={live} />
+          </div>
+        </div>
+
       </div>
     </main>
   )

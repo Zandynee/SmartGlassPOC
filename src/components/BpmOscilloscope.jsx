@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────
 
 import { useEffect, useRef } from 'react'
-import { getIrDisplaySnapshot, PPG_DISPLAY_WINDOW_MS } from '../services/imuService'
+import { getIrDisplaySnapshot, PPG_DISPLAY_WINDOW_MS } from '../services/ppgService'
 
 // ── Canvas dimensions ──────────────────────────
 const W = 260
