@@ -77,7 +77,7 @@ String   buildPpgJson(const PpgReading &r);
 // ═══════════════════════════════════════════════════════════
 void setup() {
   Serial.begin(115200);
-  while (!Serial) delay(10);
+  // while (!Serial) delay(10);
 
   Serial.println("============================");
   Serial.println(" Smart Glasses — Booting...");

@@ -77,7 +77,7 @@ export function ImuReadings({ imu, roll, pitch, yaw = 0, live = false }) {
       <PostureBadge status={imu.fhpStatus} live={live} />
       <SensorGroup label="Accelerometer" unit="g"   data={imu.accel} decimals={3} live={live} />
       <SensorGroup label="Gyroscope"     unit="°/s" data={imu.gyro}  decimals={1} live={live} />
-      <SensorGroup label="Magnetometer"  unit="µT"  data={imu.mag}   decimals={1} live={live} />
+      
     </div>
   )
 }

@@ -51,6 +51,23 @@ bool imuInit() {
 
   delay(100); // Tunggu sensor stabil setelah wake up
 
+  // DLPF: bandwidth 188 Hz, delay 1.9 ms
+  // Cukup responsif untuk sampling 50 Hz, filter frekuensi noise tinggi
+  if (!_writeRegister(REG_CONFIG, DLPF_CFG)) {
+    Serial.println("[IMU] WARNING: Gagal set DLPF.");
+  }
+
+  // Gyro full-scale: ±500 °/s
+  // Gerakan kepala cepat bisa mencapai 150–200 °/s — ±250 °/s terlalu sempit
+  if (!_writeRegister(REG_GYRO_CONFIG, GYRO_FS_SEL)) {
+    Serial.println("[IMU] WARNING: Gagal set GYRO_CONFIG.");
+  }
+
+  // Accel full-scale: ±2g — cukup untuk deteksi pitch/postur kepala
+  if (!_writeRegister(REG_ACCEL_CONFIG, ACCEL_FS_SEL)) {
+    Serial.println("[IMU] WARNING: Gagal set ACCEL_CONFIG.");
+  }
+
   _initialized = true;
   Serial.println("[IMU] Sensor siap.");
   return true;

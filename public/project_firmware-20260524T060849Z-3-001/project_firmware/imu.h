@@ -16,12 +16,26 @@
 // ─────────────────────────────────────────
 //  Register MPU-6050
 // ─────────────────────────────────────────
-#define MPU_ADDR        0x68
-#define REG_PWR_MGMT_1  0x6B
-#define REG_ACCEL_XOUT  0x3B     // Register awal akselerometer (6 byte: ax, ay, az)
-#define REG_GYRO_XOUT   0x43     // Register awal gyroscope    (6 byte: gx, gy, gz)
-#define ACCEL_SCALE     16384.0f // Sensitivitas ±2g default (LSB/g)
-#define GYRO_SCALE      131.0f   // Sensitivitas ±250°/s default (LSB/°/s)
+#define MPU_ADDR         0x68
+#define REG_PWR_MGMT_1   0x6B
+#define REG_CONFIG       0x1A     // DLPF (Digital Low-Pass Filter) config
+#define REG_GYRO_CONFIG  0x1B     // Gyro full-scale select
+#define REG_ACCEL_CONFIG 0x1C     // Accel full-scale select
+#define REG_ACCEL_XOUT   0x3B     // Register awal akselerometer (6 byte: ax, ay, az)
+#define REG_GYRO_XOUT    0x43     // Register awal gyroscope    (6 byte: gx, gy, gz)
+
+// Gyro: ±500 °/s (FS_SEL=1) — lebih cocok untuk gerakan kepala cepat
+// Rumus: rawValue / GYRO_SCALE = nilai dalam °/s
+#define GYRO_FS_SEL      0x08     // FS_SEL = 1 → ±500 °/s
+#define GYRO_SCALE       65.5f    // 65.5 LSB/°/s pada ±500 °/s
+
+// Accel: ±2g (AFS_SEL=0) — cukup untuk deteksi pitch/postur
+#define ACCEL_FS_SEL     0x00     // AFS_SEL = 0 → ±2g
+#define ACCEL_SCALE      16384.0f // 16384 LSB/g pada ±2g
+
+// DLPF_CFG = 1 → bandwidth 188 Hz, delay 1.9 ms
+// Cukup responsif untuk 50 Hz sampling, tapi filter noise tinggi
+#define DLPF_CFG         0x01
 
 // ─────────────────────────────────────────
 //  Status FHP
