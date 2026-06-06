@@ -6,7 +6,7 @@
 import { useSensors }    from './hooks/useSensors'
 import { Controls }      from './components/Controls'
 import { ImuReadings }   from './components/ImuReadings'
-import { ImuVisualizer } from './components/ImuVisualizer'
+import  ImuVisualizer  from './components/ImuVisualizer'
 import { TofReadings }   from './components/TofReadings'
 import { PpgReadings }   from './components/PpgReadings'
 
