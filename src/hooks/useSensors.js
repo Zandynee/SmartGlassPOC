@@ -24,6 +24,8 @@ import { resetPpgBuffer } from '../services/ppgService'
 import { useImuSensor } from './useImuSensor'
 import { useTofSensor } from './useTofSensor'
 import { usePpgSensor } from './usePpgSensor'
+import { startSession, endSession, insertImuReading, insertPpgReading, insertTofReading } from '../services/db/sessions'
+
 
 const decodeValue = (value) => new TextDecoder().decode(value)
 
@@ -33,12 +35,38 @@ export function useSensors() {
   const [bleError,   setBleError]   = useState(null)
 
   const bleDeviceRef = useRef(null)
+  const sessionIdRef = useRef(null)
+  const writeIntervalRef = useRef(null)
 
   // ── Per-sensor hooks ──────────────────────
 
   const imuSensor = useImuSensor()
   const tofSensor = useTofSensor()
   const ppgSensor = usePpgSensor()
+
+  // ── Persistence (define BEFORE anything that calls it) ──
+
+  const beginPersistence = useCallback((mode) => {
+    sessionIdRef.current = startSession(mode)
+    writeIntervalRef.current = setInterval(() => {
+      if (!sessionIdRef.current) return
+      insertImuReading(sessionIdRef.current, {
+        ...imuSensor.imuRef.current,
+        roll: imuSensor.roll,
+        pitch: imuSensor.pitch,
+        yaw: imuSensor.yawRef.current,
+      })
+      insertPpgReading(sessionIdRef.current, { ...ppgSensor.ppgRef.current })
+      insertTofReading(sessionIdRef.current, { ...tofSensor.tofRef.current })
+    }, 500)
+  }, [imuSensor, ppgSensor, tofSensor])
+
+  const endPersistence = useCallback(() => {
+    clearInterval(writeIntervalRef.current)
+    writeIntervalRef.current = null
+    if (sessionIdRef.current) endSession(sessionIdRef.current)
+    sessionIdRef.current = null
+  }, [])
 
   // ── Simulation ────────────────────────────
 
@@ -47,14 +75,16 @@ export function useSensors() {
     tofSensor.startSim()
     ppgSensor.startSim()
     setSimulating(true)
-  }, [imuSensor, tofSensor, ppgSensor])
+    beginPersistence('simulate')
+  }, [imuSensor, tofSensor, ppgSensor, beginPersistence])
 
   const stopSimulation = useCallback(() => {
     imuSensor.stopSim()
     tofSensor.stopSim()
     ppgSensor.stopSim()
     setSimulating(false)
-  }, [imuSensor, tofSensor, ppgSensor])
+    endPersistence()
+  }, [imuSensor, tofSensor, ppgSensor, endPersistence])
 
   const toggleSimulation = useCallback(() => {
     if (connected) return
@@ -86,6 +116,7 @@ export function useSensors() {
         setConnected(false)
         imuSensor.setPitchOverride(null)
         resetPpgBuffer()
+        endPersistence()
       })
 
       const server  = await device.gatt.connect()
@@ -95,6 +126,7 @@ export function useSensors() {
       setConnected(true)
       imuSensor.setPitchOverride(null)
       imuSensor.yawRef.current = 0
+      beginPersistence('ble')
 
       // ── IMU notifications ──────────────────
       const imuChar = await service.getCharacteristic(BLE_CHAR_IMU_UUID)
@@ -122,7 +154,7 @@ export function useSensors() {
         setBleError(err.message)
       }
     }
-  }, [imuSensor, tofSensor, ppgSensor, stopSimulation])
+  }, [imuSensor, tofSensor, ppgSensor, stopSimulation, beginPersistence, endPersistence])
 
   const disconnectBLE = useCallback(async () => {
     try {
@@ -136,7 +168,8 @@ export function useSensors() {
     setConnected(false)
     imuSensor.setPitchOverride(null)
     resetPpgBuffer()
-  }, [imuSensor])
+    endPersistence()
+  }, [imuSensor, endPersistence])
 
   const toggleConnection = useCallback(() => {
     connected ? disconnectBLE() : connectBLE()
@@ -157,27 +190,18 @@ export function useSensors() {
   // ── Public API ────────────────────────────
 
   return {
-    // Sensor data
     imu: imuSensor.imu,
     tof: tofSensor.tof,
     ppg: ppgSensor.ppg,
-
-    // Derived orientation
     roll:  imuSensor.roll,
     pitch: imuSensor.pitch,
     yaw:   imuSensor.yaw,
-
-    // Connection state
     simulating,
     connected,
     bleError,
-
-    // Actions
     toggleSimulation,
     toggleConnection,
     reset,
-
-    // Escape hatch: allow components to push raw IMU frames (e.g. unit tests)
     setImu: imuSensor.setImu,
   }
 }

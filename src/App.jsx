@@ -9,6 +9,9 @@ import { ImuReadings }   from './components/ImuReadings'
 import  ImuVisualizer  from './components/ImuVisualizer'
 import { TofReadings }   from './components/TofReadings'
 import { PpgReadings }   from './components/PpgReadings'
+import { initDb } from './services/db/db'
+import { useEffect, useState } from 'react'
+import { SessionHistory } from './components/SessionHistory'
 
 const bleSupported =
   typeof navigator !== 'undefined' && 'bluetooth' in navigator
@@ -22,6 +25,12 @@ function SectionLabel({ label }) {
 }
 
 function App() {
+  const [dbReady, setDbReady] = useState(false)
+
+  useEffect(() => {
+    initDb().then(() => setDbReady(true))
+  }, [])
+
   const {
     imu, tof, ppg,
     roll, pitch, yaw,
@@ -34,6 +43,9 @@ function App() {
   } = useSensors()
 
   const live = connected || simulating
+
+  // ← early return now comes AFTER every hook call
+  if (!dbReady) return <p>Loading…</p>
 
   return (
     <main className="px-6 pt-8 pb-10 text-left">
@@ -49,25 +61,19 @@ function App() {
         onReset={reset}
       />
 
-      {/* ── Divider ── */}
       <div className="h-px bg-[var(--border)] my-6" />
 
-      {/* ── Tiga kolom bersebelahan: IMU Readings | IMU Visualizer | ToF + PPG ── */}
       <div className="flex flex-row gap-6 items-start">
-
-        {/* Kolom 1 — IMU Readings */}
         <div className="flex-1 min-w-0">
           <SectionLabel label="IMU · Inertial Measurement" />
           <ImuReadings imu={imu} roll={roll} pitch={pitch} yaw={yaw} live={live} />
         </div>
 
-        {/* Kolom 2 — IMU Visualizer (3-D) */}
         <div className="flex-1 min-w-0">
           <SectionLabel label="IMU · 3D Visualizer" />
           <ImuVisualizer roll={roll} pitch={pitch} yaw={yaw} simulating={simulating} />
         </div>
 
-        {/* Kolom 3 — ToF + PPG */}
         <div className="flex-1 min-w-0">
           <SectionLabel label="ToF · Distance  /  PPG · Biometrics" />
           <div className="flex flex-col gap-6">
@@ -75,8 +81,10 @@ function App() {
             <PpgReadings ppg={ppg} live={live} />
           </div>
         </div>
-
       </div>
+
+      {/* ── Session History ── */}
+      <SessionHistory />
     </main>
   )
 }
