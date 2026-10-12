@@ -49,8 +49,8 @@ export function SessionHistory() {
   const [selectedId, setSelectedId] = useState(null)
   const [history, setHistory] = useState({ imu: [], ppg: [], tof: [] })
 
-  const loadSessions = useCallback(() => {
-    const rows = select('SELECT * FROM sessions ORDER BY id DESC')
+  const loadSessions = useCallback( async() => {
+    const rows = await select('SELECT * FROM sessions ORDER BY id DESC')
     setSessions(rows)
   }, [])
 
@@ -63,7 +63,10 @@ export function SessionHistory() {
       setHistory({ imu: [], ppg: [], tof: [] })
       return
     }
-    setHistory(queryHistory(selectedId))
+    (async () => {
+    const h = await queryHistory(selectedId)
+    setHistory(h)
+  })()
   }, [selectedId])
 
   return (

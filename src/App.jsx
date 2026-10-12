@@ -27,10 +27,14 @@ function SectionLabel({ label }) {
 function App() {
   const [dbReady, setDbReady] = useState(false)
 
-  useEffect(() => {
-    initDb().then(() => setDbReady(true))
-  }, [])
-
+useEffect(() => {
+  initDb()
+    .then(() => setDbReady(true))
+    .catch((err) => {
+      console.error('initDb failed:', err)
+      alert('initDb failed: ' + (err?.message || err))
+    })
+}, [])
   const {
     imu, tof, ppg,
     roll, pitch, yaw,

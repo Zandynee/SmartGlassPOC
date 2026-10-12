@@ -10,7 +10,7 @@
 //    useTofSensor  → ToF state, sim, BLE handler
 //    usePpgSensor  → PPG state, sim, BLE handler
 // ─────────────────────────────────────────────
-
+import { computeAngles } from '../services/imuService'
 import { useState, useRef, useCallback } from 'react'
 import {
   BLE_DEVICE_NAME,
@@ -46,25 +46,32 @@ export function useSensors() {
 
   // ── Persistence (define BEFORE anything that calls it) ──
 
-  const beginPersistence = useCallback((mode) => {
-    sessionIdRef.current = startSession(mode)
-    writeIntervalRef.current = setInterval(() => {
-      if (!sessionIdRef.current) return
-      insertImuReading(sessionIdRef.current, {
-        ...imuSensor.imuRef.current,
-        roll: imuSensor.roll,
-        pitch: imuSensor.pitch,
+const beginPersistence = useCallback(async (mode) => {
+  sessionIdRef.current = await startSession(mode)
+  writeIntervalRef.current = setInterval(async () => {
+    if (!sessionIdRef.current) return
+    try {
+      const currentImu = imuSensor.imuRef.current
+      const { roll, pitch } = computeAngles(currentImu.accel)
+
+      await insertImuReading(sessionIdRef.current, {
+        ...currentImu,
+        roll,
+        pitch,
         yaw: imuSensor.yawRef.current,
       })
-      insertPpgReading(sessionIdRef.current, { ...ppgSensor.ppgRef.current })
-      insertTofReading(sessionIdRef.current, { ...tofSensor.tofRef.current })
-    }, 500)
-  }, [imuSensor, ppgSensor, tofSensor])
+      await insertPpgReading(sessionIdRef.current, { ...ppgSensor.ppgRef.current })
+      await insertTofReading(sessionIdRef.current, { ...tofSensor.tofRef.current })
+    } catch (err) {
+      console.error('Persistence write failed:', err)
+    }
+  }, 500)
+}, [imuSensor, ppgSensor, tofSensor])
 
-  const endPersistence = useCallback(() => {
+  const endPersistence = useCallback(async () => {
     clearInterval(writeIntervalRef.current)
     writeIntervalRef.current = null
-    if (sessionIdRef.current) endSession(sessionIdRef.current)
+    if (sessionIdRef.current) await endSession(sessionIdRef.current)
     sessionIdRef.current = null
   }, [])
 
