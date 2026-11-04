@@ -1,88 +1,73 @@
 // ─────────────────────────────────────────────
-//  TofReadings.jsx  –  UI component
-//  Displays Time-of-Flight distance sensor data.
+//  TofReadings.jsx  –  "Jarak dengan Layar" card
+//  Displays Time-of-Flight distance with a progress bar
+//  (same pattern as the Data Riwayat summary cards) and how long
+//  the user has stayed at a safe distance.
 //
 //  Props:
-//    tof  – { distanceCm, status }
-//    live – boolean; true when receiving real/simulated data
+//    tof         – { distanceCm, status }
+//    live        – boolean; true when receiving real/simulated data
+//    safe        – true / false / null (null = unknown)
+//    safeSeconds – consecutive seconds spent at a safe distance
 // ─────────────────────────────────────────────
 
-// Distance ranges for the visual bar (firmware dummy: 10–50 cm)
-const MIN_CM = 0
-const MAX_CM = 60
+import { Card } from './Card'
+import { SAFE_MIN_CM, formatDuration } from '../hooks/useSafeDistanceTimer'
 
-function DistanceBar({ distanceCm, live }) {
-  const pct = Math.min(100, Math.max(0, ((distanceCm - MIN_CM) / (MAX_CM - MIN_CM)) * 100))
+const BAR_MAX_CM = 60   // same scale as the Data Riwayat "Jarak dengan Layar" card
 
-  // Color shifts: green (close) → amber → red (far)
-  const barColor =
-    pct < 35 ? '#22c55e'
-    : pct < 65 ? '#f59e0b'
-    : '#ef4444'
+export function TofReadings({ tof, live = false, safe = null, safeSeconds = 0 }) {
+  const sensorFault = live && tof.status && tof.status !== 'OK' && tof.status !== 'UNKNOWN'
+  const pct = live ? Math.min(100, Math.max(0, (tof.distanceCm / BAR_MAX_CM) * 100)) : 0
+  const barColor = safe === false ? '#ef4444' : '#3a8dff'
 
   return (
-    <div className="mt-2 mb-[18px]">
-      <div className="flex items-end gap-2 mb-1">
-        <span
-          className={`text-2xl font-mono font-bold tabular-nums transition-colors ${
-            live ? 'text-[var(--accent)]' : 'text-[var(--text-h)]'
-          }`}
-        >
-          {live ? distanceCm.toFixed(1) : '—'}
+    <Card title="Jarak dengan Layar" dot="#f59e0b" className="flex-1">
+      <p className="m-0 flex items-baseline gap-1.5">
+        <span className="text-4xl font-extrabold tabular-nums tracking-tight">
+          {live ? tof.distanceCm.toFixed(0) : '—'}
         </span>
-        <span className="text-xs font-mono opacity-50 mb-1">cm</span>
-      </div>
+        <span className="text-base font-semibold text-slate-500">cm</span>
+      </p>
 
-      {/* Progress bar */}
-      <div className="h-1.5 rounded-full bg-[var(--border)] overflow-hidden w-36">
+      <div
+        className="mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={BAR_MAX_CM}
+        aria-valuenow={live ? Math.round(tof.distanceCm) : 0}
+        aria-label="Jarak dengan layar"
+      >
         <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{
-            width:      `${live ? pct : 0}%`,
-            background: barColor,
-          }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, background: barColor }}
         />
       </div>
-      <div className="flex justify-between text-[10px] font-mono opacity-40 mt-0.5 w-36">
-        <span>{MIN_CM}</span>
-        <span>{MAX_CM} cm</span>
-      </div>
-    </div>
-  )
-}
+      <p className="mt-2 text-xs text-slate-500">Aman jika ≥ {SAFE_MIN_CM} cm</p>
 
-function StatusBadge({ status, live }) {
-  const isOk      = status === 'OK'
-  const isUnknown = !live || status === 'UNKNOWN'
-  return (
-    <div className="mb-[18px]">
-      <span className="text-xs font-mono font-semibold">Sensor Status</span>
-      <div className="mt-1">
-        <span
-          className={`inline-block text-xs font-mono px-2 py-0.5 rounded-full border transition-colors ${
-            isUnknown
-              ? 'border-gray-300 text-gray-400 bg-gray-100'
-              : isOk
-              ? 'border-green-500 text-green-600 bg-green-50'
-              : 'border-red-400 text-red-500 bg-red-50'
-          }`}
-        >
-          {isUnknown ? '– –' : isOk ? '✓ OK' : `✕ ${status}`}
-        </span>
-      </div>
-    </div>
-  )
-}
+      <div className="mt-3 text-sm leading-snug">
+        {!live && <p className="m-0 text-slate-500">Menunggu data sensor…</p>}
 
-export function TofReadings({ tof, live = false }) {
-  return (
-    <div className="min-w-[160px]">
-      <span className="text-xs font-mono font-semibold block mb-1">
-        Distance
-        <span className="font-normal opacity-60"> ToF</span>
-      </span>
-      <DistanceBar distanceCm={tof.distanceCm} live={live} />
-      <StatusBadge status={tof.status} live={live} />
-    </div>
+        {live && safe && (
+          <p className="m-0 text-slate-600">
+            Dalam jarak aman selama{' '}
+            <span className="font-extrabold tabular-nums text-slate-900">
+              {formatDuration(safeSeconds)}
+            </span>
+          </p>
+        )}
+
+        {live && safe === false && (
+          <>
+            <p className="m-0 font-extrabold text-red-600">Terlalu dekat dengan layar!</p>
+            <p className="m-0 text-slate-600">Jaga jarak minimal {SAFE_MIN_CM} cm.</p>
+          </>
+        )}
+
+        {sensorFault && (
+          <p className="mt-1 text-xs font-mono text-red-600">✕ Sensor ToF: {tof.status}</p>
+        )}
+      </div>
+    </Card>
   )
 }

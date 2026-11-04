@@ -15,7 +15,9 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
   useEffect(() => {
     const el = mountRef.current
     const W = el.clientWidth
-    const H = 340 
+    // CHANGED: height now follows the container (was a hard-coded 340)
+    // so the card can be sized responsively by its parent.
+    const H = el.clientHeight || 340
 
     const OBJ_SCALE = 0.005 
     const GLB_SCALE = 5.0  
@@ -23,7 +25,8 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
 
     // ── Scene, Camera, Renderer ──────────────────────────────
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0xf5f5f5)
+    // CHANGED: 0xf5f5f5 → 0xf0f0f0 to match the grey of the mockup's avatar panel
+    scene.background = new THREE.Color(0xf0f0f0)
 
     const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100)
     camera.position.set(0, -0.2, 0.4)
@@ -43,8 +46,7 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
     // ── OBJ Model Setup (Centered & Anchored) ────────────────
     const headPivot = new THREE.Group()
     
-    // 👇 THIS is your master anchor point. 
-    // Change this to move the whole OBJ and its rotation center anywhere.
+    // Master anchor point for the OBJ and its rotation centre.
     headPivot.position.set(0, -0.13, 0.015) 
     scene.add(headPivot)
 
@@ -120,44 +122,45 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
 
     // ── Animation Loop ───────────────────────────────────────
     let raf
-    // ── Animation Loop ───────────────────────────────────────
-      const animate = () => {
-        raf = requestAnimationFrame(animate)
+    const animate = () => {
+      raf = requestAnimationFrame(animate)
 
-        // 1. Define a sensitivity (0.1 = 10% movement, 0.5 = 50% movement)
-        const SENSITIVITY = 0.02
+      // Sensitivity (0.1 = 10% movement, 0.5 = 50% movement)
+      const SENSITIVITY = 0.02
 
-        const tr = targetRef.current.roll * SENSITIVITY
-        const tp = targetRef.current.pitch * SENSITIVITY
-        const ty = targetRef.current.yaw * SENSITIVITY*5
+      const tr = targetRef.current.roll * SENSITIVITY
+      const tp = targetRef.current.pitch * SENSITIVITY
+      const ty = targetRef.current.yaw * SENSITIVITY*5
 
-        // 2. Animate OBJ Pivot
-        headPivot.rotation.z = THREE.MathUtils.lerp(headPivot.rotation.z, -tr, 0.07)
-        headPivot.rotation.x = THREE.MathUtils.lerp(headPivot.rotation.x,  tp, 0.07)
-        headPivot.rotation.y = THREE.MathUtils.lerp(headPivot.rotation.y, -ty, 0.07)
+      // Animate OBJ Pivot
+      headPivot.rotation.z = THREE.MathUtils.lerp(headPivot.rotation.z, -tr, 0.07)
+      headPivot.rotation.x = THREE.MathUtils.lerp(headPivot.rotation.x,  tp, 0.07)
+      headPivot.rotation.y = THREE.MathUtils.lerp(headPivot.rotation.y, -ty, 0.07)
 
-        // 3. Animate the Head Bone
-        if (headBone && initialHeadRot) {
-          const targetZ = initialHeadRot.z - tr
-          const targetX = initialHeadRot.x + tp
-          const targetY = initialHeadRot.y - ty
+      // Animate the Head Bone
+      if (headBone && initialHeadRot) {
+        const targetZ = initialHeadRot.z - tr
+        const targetX = initialHeadRot.x + tp
+        const targetY = initialHeadRot.y - ty
 
-          headBone.rotation.z = THREE.MathUtils.lerp(headBone.rotation.z, targetZ, 0.07)
-          headBone.rotation.x = THREE.MathUtils.lerp(headBone.rotation.x, targetX, 0.07)
-          headBone.rotation.y = THREE.MathUtils.lerp(headBone.rotation.y, targetY, 0.07)
-        }
-
-        renderer.render(scene, camera)
+        headBone.rotation.z = THREE.MathUtils.lerp(headBone.rotation.z, targetZ, 0.07)
+        headBone.rotation.x = THREE.MathUtils.lerp(headBone.rotation.x, targetX, 0.07)
+        headBone.rotation.y = THREE.MathUtils.lerp(headBone.rotation.y, targetY, 0.07)
       }
+
+      renderer.render(scene, camera)
+    }
     animate()
 
     // ── Resize & Cleanup ─────────────────────────────────────
+    // CHANGED: resize now re-reads the height too, since the card is responsive.
     const onResize = () => {
       if (!el) return
       const W2 = el.clientWidth
-      camera.aspect = W2 / H
+      const H2 = el.clientHeight || H
+      camera.aspect = W2 / H2
       camera.updateProjectionMatrix()
-      renderer.setSize(W2, H)
+      renderer.setSize(W2, H2)
     }
     window.addEventListener('resize', onResize)
 
@@ -172,11 +175,13 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
     }
   }, [])
 
+  // CHANGED: fills its parent (100% × 100%) instead of a fixed 340px box;
+  // the rounded corners / clipping now live on the parent card.
   return (
-    <div style={{ position: 'relative', width: '100%', height: 340 }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div
         ref={mountRef}
-        style={{ width: '100%', height: '100%' }}
+        style={{ width: '100%', height: '100%', lineHeight: 0 }}
       />
     </div>
   )

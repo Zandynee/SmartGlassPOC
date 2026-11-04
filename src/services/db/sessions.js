@@ -1,37 +1,60 @@
-import { execute, select, lastInsertId } from './db'
+import { execute, select } from './db'
 
 export async function startSession(mode) {
-    await execute('INSERT INTO sessions (started_at, mode) VALUES (?, ?)', [Date.now(), mode])
-    return lastInsertId()
+  const { lastInsertId } = await execute(
+    'INSERT INTO sessions (started_at, mode) VALUES (?, ?)',
+    [Date.now(), mode]
+  )
+  if (!lastInsertId) throw new Error('startSession: no lastInsertId returned')
+  return lastInsertId
 }
 
-export async function endSession(sessionId) {
-    await execute('UPDATE sessions SET ended_at = ? WHERE id = ?', [Date.now(), sessionId])
+/** endedAt defaults to now; the recorder passes the moment the link dropped. */
+export async function endSession(sessionId, endedAt = Date.now()) {
+  await execute('UPDATE sessions SET ended_at = ? WHERE id = ?', [endedAt, sessionId])
 }
+
+const n = (v) => (v == null || Number.isNaN(v) ? null : v)
 
 export async function insertImuReading(sessionId, r) {
-    await execute(
-        `INSERT INTO imu_readings
-         (session_id, t, ax, ay, az, gx, gy, gz, roll, pitch, yaw, fhp_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-         [sessionId, Date.now(), r.accel.x, r.accel.y, r.accel.z, r.gyro.x, r.gyro.y, r.gyro.z, r.roll, r.pitch, r.yaw, r.fhpStatus]
-    )
+  await execute(
+    `INSERT INTO imu_readings
+     (session_id, t, ax, ay, az, gx, gy, gz, roll, pitch, yaw, fhp_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [sessionId, Date.now(),
+      n(r.accel?.x), n(r.accel?.y), n(r.accel?.z),
+      n(r.gyro?.x), n(r.gyro?.y), n(r.gyro?.z),
+      n(r.roll), n(r.pitch), n(r.yaw), r.fhpStatus ?? null]
+  )
 }
 
 export async function insertPpgReading(sessionId, r) {
-  await  execute(
+  await execute(
     `INSERT INTO ppg_readings
      (session_id, t, ir_raw, red_raw, hr_bpm, hr_detectable, fatigue_index, fatigue_status)
      VALUES (?,?,?,?,?,?,?,?)`,
-    [sessionId, Date.now(), r.irRaw, r.redRaw, r.hrBpm,
-     r.hrDetectable ? 1 : 0, r.fatigueIndex, r.fatigueStatus]
+    [sessionId, Date.now(), n(r.irRaw), n(r.redRaw), n(r.hrBpm),
+     r.hrDetectable ? 1 : 0, n(r.fatigueIndex), r.fatigueStatus ?? null]
   )
 }
 
 export async function insertTofReading(sessionId, r) {
-   await execute(
+  await execute(
     `INSERT INTO tof_readings (session_id, t, distance_cm, status) VALUES (?,?,?,?)`,
-    [sessionId, Date.now(), r.distanceCm, r.status]
+    [sessionId, Date.now(), n(r.distanceCm), r.status ?? null]
+  )
+}
+
+/** One finished fatigue check (HRV now vs baseline). */
+export async function insertCheck(sessionId, c) {
+  await execute(
+    `INSERT INTO checks
+     (session_id, t, hr_bpm, sdnn, rmssd, pnn50, base_hr_bpm, base_sdnn, base_rmssd, base_pnn50,
+      fatigue_index, fatigued, n_ibis, duration_s)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [sessionId, Date.now(), n(c.hrBpm), n(c.sdnn), n(c.rmssd), n(c.pnn50),
+     n(c.baseHrBpm), n(c.baseSdnn), n(c.baseRmssd), n(c.basePnn50),
+     n(c.fatigueIndex), c.fatigued ? 1 : 0, n(c.nIbis), n(c.durationS)]
   )
 }
 
@@ -39,10 +62,19 @@ export async function queryHistory(sessionId) {
   return {
     imu: await select('SELECT * FROM imu_readings WHERE session_id = ? ORDER BY t', [sessionId]),
     ppg: await select('SELECT * FROM ppg_readings WHERE session_id = ? ORDER BY t', [sessionId]),
-    tof: await select('SELECT * FROM tof_readings WHERE session_id = ? ORDER BY t', [sessionId])
+    tof: await select('SELECT * FROM tof_readings WHERE session_id = ? ORDER BY t', [sessionId]),
+    checks: await select('SELECT * FROM checks WHERE session_id = ? ORDER BY t', [sessionId]),
   }
 }
 
+export async function deleteSession(sessionId) {
+  await execute('DELETE FROM imu_readings WHERE session_id = ?', [sessionId])
+  await execute('DELETE FROM ppg_readings WHERE session_id = ?', [sessionId])
+  await execute('DELETE FROM tof_readings WHERE session_id = ?', [sessionId])
+  await execute('DELETE FROM checks WHERE session_id = ?', [sessionId])
+  await execute('DELETE FROM sessions WHERE id = ?', [sessionId])
+}
+
 if (typeof window !== 'undefined') {
-  window._sessions = { startSession, endSession, insertImuReading, insertPpgReading, insertTofReading, queryHistory }
+  window._sessions = { startSession, endSession, insertImuReading, insertPpgReading, insertTofReading, insertCheck, queryHistory }
 }

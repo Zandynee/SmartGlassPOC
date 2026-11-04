@@ -3,7 +3,7 @@
 //  Scrolling PPG waveform on a canvas element,
 //  styled like a CRT phosphor oscilloscope.
 //
-//  Renders the actual IR waveform from imuService's
+//  Renders the actual IR waveform from the PPG service's
 //  display buffer — not a synthetic animation.
 //  The buffer is populated by:
 //    • BLE mode:  parseBlePpg() (one sample per 400 ms)
@@ -16,36 +16,32 @@
 import { useEffect, useRef } from 'react'
 import { getIrDisplaySnapshot, PPG_DISPLAY_WINDOW_MS } from '../services/ppgService'
 
-// ── Canvas dimensions ──────────────────────────
-const W = 260
-const H = 88
+const W = 600
+const H = 200
 
 // ── Canvas renderer ────────────────────────────
 function drawFrame(ctx, snapshot, live) {
-  // Background
   ctx.fillStyle = '#020d02'
   ctx.fillRect(0, 0, W, H)
 
-  // Graticule (oscilloscope grid)
   ctx.lineWidth   = 1
-  ctx.strokeStyle = 'rgba(0,255,80,0.07)'
-  for (let col = 1; col < 8; col++) {
+  ctx.strokeStyle = 'rgba(0,255,80,0.09)'
+  for (let col = 1; col < 12; col++) {
     ctx.beginPath()
-    ctx.moveTo((col / 8) * W, 0)
-    ctx.lineTo((col / 8) * W, H)
+    ctx.moveTo((col / 12) * W, 0)
+    ctx.lineTo((col / 12) * W, H)
     ctx.stroke()
   }
-  for (let row = 1; row < 4; row++) {
+  for (let row = 1; row < 6; row++) {
     ctx.beginPath()
-    ctx.moveTo(0, (row / 4) * H)
-    ctx.lineTo(W, (row / 4) * H)
+    ctx.moveTo(0, (row / 6) * H)
+    ctx.lineTo(W, (row / 6) * H)
     ctx.stroke()
   }
 
-  // Flat isoelectric line when idle or no signal
   if (!live || !snapshot || snapshot.length < 2) {
     ctx.strokeStyle = 'rgba(0,255,80,0.28)'
-    ctx.lineWidth   = 1.5
+    ctx.lineWidth   = 2
     ctx.beginPath()
     ctx.moveTo(0, H * 0.82)
     ctx.lineTo(W, H * 0.82)
@@ -53,17 +49,12 @@ function drawFrame(ctx, snapshot, live) {
     return
   }
 
-  // ── Map timestamps to x-axis ──────────────────
-  // The display window spans PPG_DISPLAY_WINDOW_MS.
-  // x=0 is the oldest edge, x=W is "now".
   const now    = Date.now()
   const tStart = now - PPG_DISPLAY_WINDOW_MS
 
   const toX = (t) => ((t - tStart) / PPG_DISPLAY_WINDOW_MS) * W
-  // y=0 is top; amplitude occupies 10 %–88 % of canvas height
   const toY = (v) => H * 0.88 - v * H * 0.78
 
-  // Build the path once, draw twice (glow + crisp trace)
   const tracePath = () => {
     ctx.beginPath()
     let started = false
@@ -75,37 +66,35 @@ function drawFrame(ctx, snapshot, live) {
     }
   }
 
-  // Glow layer
   ctx.save()
   ctx.strokeStyle = 'rgba(0,255,85,0.22)'
-  ctx.lineWidth   = 5
+  ctx.lineWidth   = 7
   ctx.shadowColor = '#00ff55'
-  ctx.shadowBlur  = 10
+  ctx.shadowBlur  = 14
   tracePath()
   ctx.stroke()
   ctx.restore()
 
-  // Main phosphor trace
   ctx.save()
   ctx.strokeStyle = '#00ff55'
-  ctx.lineWidth   = 1.8
+  ctx.lineWidth   = 2.6
   ctx.shadowColor = '#00ff55'
-  ctx.shadowBlur  = 4
+  ctx.shadowBlur  = 6
+  ctx.lineJoin    = 'round'
   tracePath()
   ctx.stroke()
   ctx.restore()
 
-  // ── Leading-edge dot (scan-head indicator) ────
   const last = snapshot[snapshot.length - 1]
   const dotX = toX(last.t)
   const dotY = toY(last.vNorm)
   if (dotX >= 0 && dotX <= W) {
     ctx.save()
     ctx.beginPath()
-    ctx.arc(dotX, dotY, 3, 0, Math.PI * 2)
+    ctx.arc(dotX, dotY, 4.5, 0, Math.PI * 2)
     ctx.fillStyle   = '#00ff55'
     ctx.shadowColor = '#00ff55'
-    ctx.shadowBlur  = 8
+    ctx.shadowBlur  = 10
     ctx.fill()
     ctx.restore()
   }
@@ -125,8 +114,6 @@ export function BpmOscilloscope({ live }) {
 
     const tick = () => {
       raf = requestAnimationFrame(tick)
-      // Read the latest normalized snapshot from the service's display buffer.
-      // Returns null when there is no AC signal (flat / no contact / idle).
       const snapshot = liveRef.current ? getIrDisplaySnapshot() : null
       drawFrame(ctx, snapshot, liveRef.current)
     }
@@ -135,24 +122,19 @@ export function BpmOscilloscope({ live }) {
     return () => cancelAnimationFrame(raf)
   }, [])
 
+  // CHANGED: no white wrapper any more (the parent Card is already white);
+  // just a small caption and the dark screen with a thin card-style border.
   return (
-    <div className="mb-[18px]">
-      <span className="text-xs font-mono font-semibold block mb-1">
-        PPG Waveform
-        <span className="font-normal opacity-60"> Oscilloscope</span>
-      </span>
-
-      <div
-        className="rounded-md overflow-hidden border border-[var(--border)]"
-        style={{ display: 'inline-block', lineHeight: 0 }}
-      >
-        <canvas
-          ref={canvasRef}
-          width={W}
-          height={H}
-          style={{ display: 'block', width: W, height: H }}
-        />
-      </div>
+    <div>
+      <p className="m-0 mb-1.5 text-xs font-semibold text-slate-500">
+        PPG Waveform <span className="font-normal text-slate-400">· Oscilloscope</span>
+      </p>
+      <canvas
+        ref={canvasRef}
+        width={W}
+        height={H}
+        className="block w-full h-auto rounded-xl border border-[#dbe6f7]"
+      />
     </div>
   )
 }

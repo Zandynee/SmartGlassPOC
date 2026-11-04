@@ -1,90 +1,91 @@
 // ─────────────────────────────────────────────
-//  Controls.jsx  –  UI component
-//  Connection & simulation controls only.
+//  Controls.jsx  –  connection & simulation controls
 //  Zero business logic — delegates to props.
+//  `connecting` shows a spinner + notice while the native BLE scan
+//  (~8 s) is running, and locks the other buttons.
 // ─────────────────────────────────────────────
 
 const btnBase =
-  'inline-block px-3.5 py-1.5 text-sm font-mono ' +
-  'rounded-md border cursor-pointer transition-all ' +
-  'hover:shadow-[var(--shadow)]'
+  'inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-[#c9d9f2] ' +
+  'text-sm font-semibold cursor-pointer transition-colors hover:border-[var(--vg-tab-active)] ' +
+  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#c9d9f2]'
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block w-4 h-4 rounded-full border-2 border-[var(--vg-tab-active)] border-t-transparent animate-spin"
+      aria-hidden="true"
+    />
+  )
+}
 
 export function Controls({
   connected,
   simulating,
+  connecting = false,
   bleError,
-  bleSupported,
   onToggleConnection,
   onToggleSimulation,
   onReset,
 }) {
   return (
-    <div className="mb-2">
-
-      {/* ── Web Bluetooth not available notice ── */}
-      {!bleSupported && (
-        <p className="mb-2 text-xs font-mono text-amber-500 border border-amber-500/30 bg-amber-500/10 rounded-md px-3 py-1.5">
-          ⚠ Web Bluetooth API unavailable — use Chrome or Edge (desktop) over https or localhost.
-          Simulation mode still works.
+    <div className="flex flex-col items-end gap-2">
+      {connecting && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="max-w-xl flex items-center gap-2 text-xs text-[var(--vg-tab-active)] border border-[#c9d9f2] bg-[#f3f8ff] rounded-xl px-3 py-1.5"
+        >
+          <Spinner />
+          Mencari VisioGuard… pastikan kacamata menyala dan berada di dekat komputer (hingga ±8 detik).
         </p>
       )}
 
-      {/* ── BLE error banner ── */}
-      {bleError && (
-        <p className="mb-2 text-xs font-mono text-red-400 border border-red-400/30 bg-red-400/10 rounded-md px-3 py-1.5">
+      {bleError && !connecting && (
+        <p className="max-w-xl text-xs font-mono text-red-600 border border-red-300 bg-red-50 rounded-xl px-3 py-1.5">
           ✕ {bleError}
         </p>
       )}
 
-      {/* ── Connect / Disconnect BLE ── */}
-      <button
-        className={`${btnBase} ${
-          connected
-            ? 'border-green-500 text-green-600 bg-green-500/10'
-            : 'border-[var(--border)] bg-[var(--social-bg)] text-[var(--text-h)]'
-        }`}
-        onClick={onToggleConnection}
-        disabled={!bleSupported && !connected}
-        title={
-          !bleSupported
-            ? 'Web Bluetooth API not available in this browser'
-            : connected
-            ? 'Disconnect from SmartGlasses'
-            : 'Connect to SmartGlasses via Bluetooth LE'
-        }
-      >
-        <span
-          className={`inline-block w-[7px] h-[7px] rounded-full transition-colors ${
-            connected
-              ? 'bg-green-500 shadow-[0_0_6px_#22c55e88]'
-              : 'bg-gray-400'
-          }`}
-        />
-        {connected ? ' Disconnect BLE' : ' Connect BLE'}
-      </button>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          className={`${btnBase} ${connected ? 'text-green-700' : 'text-[var(--vg-tab-active)]'}`}
+          onClick={onToggleConnection}
+          disabled={connecting}
+          aria-busy={connecting}
+          title={
+            connecting
+              ? 'Sedang menghubungkan…'
+              : connected
+              ? 'Putuskan koneksi dari VisioGuard'
+              : 'Hubungkan ke VisioGuard lewat Bluetooth LE'
+          }
+        >
+          {connecting ? (
+            <Spinner />
+          ) : (
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                connected ? 'bg-green-500 shadow-[0_0_6px_#22c55e88]' : 'bg-gray-400'
+              }`}
+            />
+          )}
+          {connecting ? 'Menghubungkan…' : connected ? 'Putuskan BLE' : 'Hubungkan BLE'}
+        </button>
 
-      {/* ── Simulate / Stop ── */}
-      <button
-        className={`${btnBase} ${
-          simulating
-            ? 'border-[var(--accent-border)] text-[var(--accent)] bg-[var(--accent-bg)]'
-            : 'border-[var(--border)] bg-[var(--social-bg)] text-[var(--text-h)]'
-        } ${connected ? 'opacity-40 cursor-not-allowed' : ''}`}
-        onClick={onToggleSimulation}
-        disabled={connected}
-        title={connected ? 'Disconnect BLE before using simulation' : undefined}
-      >
-        {simulating ? '⏹ Stop' : '▶ Simulate'}
-      </button>
+        <button
+          className={`${btnBase} ${simulating ? 'text-amber-600' : 'text-[var(--vg-tab-active)]'}`}
+          onClick={onToggleSimulation}
+          disabled={connected || connecting}
+          title={connected ? 'Putuskan BLE sebelum memakai simulasi' : undefined}
+        >
+          {simulating ? '⏹ Berhenti' : '▶ Simulasi'}
+        </button>
 
-      {/* ── Reset ── */}
-      <button
-        className={`${btnBase} border-[var(--border)] bg-[var(--social-bg)] text-[var(--text-h)] opacity-65 hover:opacity-100`}
-        onClick={onReset}
-      >
-        ↺ Reset
-      </button>
-
+        <button className={`${btnBase} text-slate-600`} onClick={onReset} disabled={connecting}>
+          ↺ Reset
+        </button>
+      </div>
     </div>
   )
 }
