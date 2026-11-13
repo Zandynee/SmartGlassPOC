@@ -3,7 +3,7 @@
 //  Each card: label, big value + unit, linear progress bar, note.
 //
 //  Props:
-//    summary – { hr: {avg,count}, fatigue, distance, posture }   (aggregate())
+//    summary – { hr: {avg,count}, rmssd, distance, posture }   (aggregate())
 // ─────────────────────────────────────────────
 
 import { METRIC_BY_ID, formatValue } from '../../utils/history'
@@ -17,11 +17,12 @@ const CARDS = [
     note: 'Normal 60–100 bpm',
   },
   {
-    id: 'fatigue',
-    label: 'Indeks Kelelahan',
-    progress: (v) => v / 100,
-    note: 'Lelah jika ≥ 75',
-    color: (v) => (v < 50 ? '#22c55e' : v < 75 ? '#f59e0b' : '#ef4444'),
+    id: 'rmssd',
+    label: 'Perubahan RMSSD (rata-rata cek)',
+    progress: (v) => (v + 60) / 80,                    // −60 % … +20 %
+    note: 'Saran istirahat jika turun ≥ 20%',
+    color: (v) => (v <= -20 ? '#f59e0b' : '#22c55e'),
+    signed: true,
   },
   {
     id: 'distance',
@@ -55,22 +56,22 @@ export function SummaryCards({ summary }) {
         return (
           <article
             key={c.id}
-            className="rounded-2xl bg-white border border-[#dbe6f7] shadow-sm px-5 py-4"
+            className="rounded-2xl bg-white border border-line shadow-sm px-5 py-4"
           >
             <div className="flex items-center justify-between gap-2">
-              <h3 className="m-0 text-sm font-bold text-slate-600">{c.label}</h3>
-              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: m.color }} />
+              <h3 className="m-0 text-sm font-bold text-ink-soft">{c.label}</h3>
+              <span className="inline-block size-dot rounded-full" style={{ background: m.color }} />
             </div>
 
             <p className="mt-2 flex items-baseline gap-1.5">
               <span className="text-4xl font-extrabold tabular-nums tracking-tight">
-                {formatValue(avg, 0)}
+                {c.signed && avg > 0 ? '+' : ''}{formatValue(avg, 0)}
               </span>
-              <span className="text-base font-semibold text-slate-500">{m.unit}</span>
+              <span className="text-base font-semibold text-ink-muted">{m.unit}</span>
             </p>
 
             <div
-              className="mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden"
+              className="mt-3 h-bar rounded-full bg-wash overflow-hidden"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
@@ -83,9 +84,9 @@ export function SummaryCards({ summary }) {
               />
             </div>
 
-            <p className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+            <p className="mt-2 flex items-center justify-between gap-2 text-xs text-ink-muted">
               <span>{c.note}</span>
-              <span className="tabular-nums">{count.toLocaleString('id-ID')} data</span>
+              <span className="tabular-nums">{count.toLocaleString('id-ID')} {c.id === 'rmssd' ? 'cek' : 'data'}</span>
             </p>
           </article>
         )

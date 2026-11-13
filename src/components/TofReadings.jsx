@@ -27,11 +27,11 @@ export function TofReadings({ tof, live = false, safe = null, safeSeconds = 0 })
         <span className="text-4xl font-extrabold tabular-nums tracking-tight">
           {live ? tof.distanceCm.toFixed(0) : '—'}
         </span>
-        <span className="text-base font-semibold text-slate-500">cm</span>
+        <span className="text-base font-semibold text-ink-muted">cm</span>
       </p>
 
       <div
-        className="mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden"
+        className="mt-3 h-bar rounded-full bg-wash overflow-hidden"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={BAR_MAX_CM}
@@ -43,15 +43,15 @@ export function TofReadings({ tof, live = false, safe = null, safeSeconds = 0 })
           style={{ width: `${pct}%`, background: barColor }}
         />
       </div>
-      <p className="mt-2 text-xs text-slate-500">Aman jika ≥ {SAFE_MIN_CM} cm</p>
+      <p className="mt-2 text-xs text-ink-muted">Aman jika ≥ {SAFE_MIN_CM} cm</p>
 
       <div className="mt-3 text-sm leading-snug">
-        {!live && <p className="m-0 text-slate-500">Menunggu data sensor…</p>}
+        {!live && <p className="m-0 text-ink-muted">Menunggu data sensor…</p>}
 
         {live && safe && (
-          <p className="m-0 text-slate-600">
+          <p className="m-0 text-ink-soft">
             Dalam jarak aman selama{' '}
-            <span className="font-extrabold tabular-nums text-slate-900">
+            <span className="font-extrabold tabular-nums text-ink">
               {formatDuration(safeSeconds)}
             </span>
           </p>
@@ -59,13 +59,13 @@ export function TofReadings({ tof, live = false, safe = null, safeSeconds = 0 })
 
         {live && safe === false && (
           <>
-            <p className="m-0 font-extrabold text-red-600">Terlalu dekat dengan layar!</p>
-            <p className="m-0 text-slate-600">Jaga jarak minimal {SAFE_MIN_CM} cm.</p>
+            <p className="m-0 font-extrabold text-danger">Terlalu dekat dengan layar!</p>
+            <p className="m-0 text-ink-soft">Jaga jarak minimal {SAFE_MIN_CM} cm.</p>
           </>
         )}
 
         {sensorFault && (
-          <p className="mt-1 text-xs font-mono text-red-600">✕ Sensor ToF: {tof.status}</p>
+          <p className="mt-1 text-xs font-mono text-danger">✕ Sensor ToF: {tof.status}</p>
         )}
       </div>
     </Card>

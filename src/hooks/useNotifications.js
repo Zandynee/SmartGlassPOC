@@ -5,7 +5,8 @@
 //  level → card colour in the UI
 //    info    blue    connection events
 //    warning yellow  screen-time reminder, poor posture
-//    danger  red     fatigue detected
+//    danger  red     (unused)
+//    HRV check: DROP → warning, SOFT → info (no "kelelahan" wording, handoff §5)
 //
 //  Events are edge-triggered (fire once when the state changes),
 //  so the feed isn't flooded on every sensor sample.
@@ -18,7 +19,7 @@ const MAX_ITEMS = 20
 // Remind the user every N minutes of continuous screen time.
 export const SCREEN_REMINDER_MIN = 10
 
-export function useNotifications({ live, fhpStatus, fatigueStatus, ppgAlert = null }) {
+export function useNotifications({ live, fhpStatus, checkStatus = null, ppgAlert = null }) {
   const [items, setItems] = useState([])
   const nextId = useRef(1)
 
@@ -48,14 +49,15 @@ export function useNotifications({ live, fhpStatus, fatigueStatus, ppgAlert = nu
     prevFhp.current = fhpStatus
   }, [fhpStatus, live, push])
 
-  // ── Fatigue ────────────────────────────────
-  const prevFatigue = useRef(fatigueStatus)
+  // ── HRV check result (null while no result is on screen) ──
+  const prevCheck = useRef(checkStatus)
   useEffect(() => {
-    if (live && fatigueStatus === 'FATIGUED' && prevFatigue.current !== 'FATIGUED') {
-      push('danger', 'Anda terdeteksi mulai kelelahan.')
+    if (live && checkStatus !== prevCheck.current) {
+      if (checkStatus === 'DROP') push('warning', 'HRV turun dibanding baseline, pertimbangkan istirahat.')
+      else if (checkStatus === 'SOFT') push('info', 'HRV sedikit turun dibanding baseline.')
     }
-    prevFatigue.current = fatigueStatus
-  }, [fatigueStatus, live, push])
+    prevCheck.current = checkStatus
+  }, [checkStatus, live, push])
 
   // ── Abnormal PPG vs. calibration baseline ──
   const prevPpgAlert = useRef(false)

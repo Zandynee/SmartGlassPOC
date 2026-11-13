@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────
 //  useHistoryData.js
+//  Also loads the daily `baselines` rows (fitness answer per day).
 //  Loads the session list, then the readings of every session that
 //  overlaps the visible date range (via the existing queryHistory()).
 //
@@ -10,13 +11,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { select } from '../services/db/db'
-import { queryHistory } from '../services/db/sessions'
+import { queryHistory, queryBaselines } from '../services/db/sessions'
 import { overlapsRange } from '../utils/history'
 
 const CHUNK = 4   // sessions fetched in parallel
 
 export function useHistoryData(range) {
   const [allSessions, setAllSessions] = useState([])
+  const [baselines, setBaselines] = useState([])
   const [histories, setHistories] = useState({})        // id → { imu, ppg, tof }
   const [loadingList, setLoadingList] = useState(true)
   const [loadingReadings, setLoadingReadings] = useState(false)
@@ -44,10 +46,11 @@ export function useHistoryData(range) {
   useEffect(() => {
     let dead = false
     setLoadingList(true)
-    select('SELECT * FROM sessions ORDER BY id DESC')
-      .then((rows) => {
+    Promise.all([select('SELECT * FROM sessions ORDER BY id DESC'), queryBaselines()])
+      .then(([rows, bases]) => {
         if (dead) return
         setAllSessions(rows)
+        setBaselines(bases)
         setError(null)
       })
       .catch((e) => {
@@ -98,6 +101,7 @@ export function useHistoryData(range) {
 
   return {
     allSessions,
+    baselines,
     histories,
     loading: loadingList || loadingReadings,
     error,

@@ -1,6 +1,143 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap');
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────
+   Design tokens → readable utility names
+   Every name below becomes a Tailwind class, e.g.
+     --color-line            → border-line, bg-line
+     --spacing-touch         → size-touch, w-touch, h-touch
+     --text-caption          → text-caption
+   so components say what a value MEANS instead of what it measures.
+   ───────────────────────────────────────────── */
+@theme {
+  /* brand */
+  --color-brand: #3391ff;
+  --color-brand-soft: #cde0ff;
+  --color-brand-strong: #1d4ed8;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+
+  /* surfaces & lines */
+  --color-page: #eef4ff;
+  --color-sheet: #f4f8ff;
+  --color-tint: #f5f9ff;
+  --color-line: #dbe6f7;
+  --color-line-strong: #c9d9f2;
+  --color-line-faint: #e8eef9;
+  --color-backdrop: rgb(15 23 42 / 0.45);
+
+  /* text & neutral greys (slate 900 → 300, then light surfaces) */
+  --color-ink: #0f172a;
+  --color-ink-strong: #1e293b;
+  --color-ink-medium: #334155;
+  --color-ink-soft: #475569;
+  --color-ink-muted: #64748b;
+  --color-ink-faint: #94a3b8;
+  --color-ink-ghost: #cbd5e1;
+  --color-hairline: #e2e8f0;
+  --color-wash: #f1f5f9;
+  --color-mist: #f8fafc;
+
+  /* notification levels */
+  --color-info: #2f8cff;
+  --color-caution: #ffd400;
+  --color-alert: #ff3b3b;
+
+  /* status: ok / warning / danger / info */
+  --color-ok: #16a34a;
+  --color-ok-strong: #047857;
+  --color-ok-deep: #065f46;
+  --color-ok-solid: #10b981;
+  --color-ok-tint: #d1fae5;
+  --color-ok-surface: #ecfdf5;
+  --color-ok-line: #a7f3d0;
+  --color-ok-line-strong: #6ee7b7;
+
+  --color-warning: #d97706;
+  --color-warning-strong: #b45309;
+  --color-warning-deep: #92400e;
+  --color-warning-solid: #f59e0b;
+  --color-warning-bright: #fbbf24;
+  --color-warning-tint: #fef3c7;
+  --color-warning-surface: #fffbeb;
+  --color-warning-line: #fde68a;
+
+  --color-danger: #dc2626;
+  --color-danger-strong: #b91c1c;
+  --color-danger-surface: #fef2f2;
+  --color-danger-line: #fecaca;
+  --color-danger-line-strong: #fca5a5;
+
+  --color-info-strong: #1e40af;
+  --color-info-surface: #eff6ff;
+  --color-info-line: #bfdbfe;
+
+  /* type scale */
+  --text-micro: 0.625rem;          /* 10px – tiny counters */
+  --text-micro--line-height: 1;
+  --text-caption: 0.6875rem;       /* 11px – timestamps, group headings */
+  --text-caption--line-height: 1.25;
+  --text-label: 0.8125rem;         /* 13px – list rows, legend */
+  --text-label--line-height: 1.35;
+  --text-nav: 0.9375rem;           /* 15px – top-bar tabs */
+  --text-nav--line-height: 1.4;
+  --text-page-title: 1.75rem;      /* 28px – page headings */
+  --text-page-title--line-height: 1.2;
+
+  /* radii */
+  --radius-chip: 4px;
+
+  /* sizes (work for w-, h-, size-, min-w-, max-h-, top-, …) */
+  --spacing-topbar: 4rem;                          /* sticky header height */
+  --spacing-touch: 2.5rem;                         /* round icon buttons, avatars */
+  --spacing-touch-md: 2.25rem;
+  --spacing-touch-sm: 2rem;
+  --spacing-control: 2.5rem;                       /* pill button / input height */
+  --spacing-control-md: 2.25rem;
+  --spacing-control-sm: 2rem;
+  --spacing-logo-tile: 3rem;
+  --spacing-step: 1.5rem;                          /* numbered wizard bullet */
+  --spacing-spinner: 1rem;
+  --spacing-dot: 0.625rem;                         /* status dot */
+  --spacing-dot-sm: 0.5rem;
+  --spacing-bar: 0.625rem;                         /* progress-bar thickness */
+  --spacing-key-box: 0.875rem;                     /* legend colour box */
+  --spacing-key-length: 1.25rem;                   /* legend line sample */
+  --spacing-stroke: 3px;                           /* underline / legend-line thickness */
+  --spacing-count-badge: 1.125rem;                 /* unread counter bubble */
+  --spacing-battery-ring: 5.5rem;
+  --spacing-dropdown: 3rem;                        /* offset of dropdowns under a button */
+  --spacing-popover: 20rem;
+  --spacing-menu: 13.75rem;
+  --spacing-tooltip: 10rem;
+  --spacing-table: 15rem;                          /* max height of raw-data tables */
+  --spacing-modal: 90svh;
+  --spacing-overlay: 70svh;
+  --spacing-sidebar: clamp(280px, 22vw, 400px);
+  --spacing-chart-panel: clamp(260px, 34vh, 380px);
+  --spacing-visualizer: clamp(220px, 22vw, 320px);
+}
+
+/* things a single theme variable can't express */
+@utility h-below-topbar {
+  height: calc(100svh - var(--spacing-topbar));
+}
+
+/* named grid layouts */
+@utility grid-cols-topbar {            /* logo | tabs | actions, tabs stay centred */
+  grid-template-columns: 1fr auto 1fr;
+}
+@utility grid-cols-dashboard {         /* status + distance (5) | posture (7) */
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+
+/* stacking order, lowest → highest */
+@utility z-raised   { z-index: 1; }
+@utility z-sticky   { z-index: 10; }
+@utility z-dropdown { z-index: 20; }
+@utility z-header   { z-index: 30; }
+@utility z-modal    { z-index: 50; }
+
 :root {
   /* ── Existing tokens (kept so SessionHistory / Controls keep working) ── */
   --text: #3f3a48;

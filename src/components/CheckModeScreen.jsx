@@ -1,46 +1,46 @@
 // ─────────────────────────────────────────────
 //  CheckModeScreen.jsx  –  STATE C · CHECK_MODE
 //
-//  Measuring (≈2 min) → compares current HRV with the stored baseline →
-//  "Fatigue Detected" when most indicators dropped significantly.
-//  Afterwards: continue working (writes 1) or end the session.
+//  3 × 60 s windows (glasses still on the table, fingertip on the sensor) →
+//  median RMSSD / SDNN vs. today's baseline (decision.js).
+//  Result: one main message, RMSSD and SDNN change in %, quality ("2 dari 3 valid"),
+//  reason + instruction when it failed, "not a medical device" note.
+//  Buttons: "Istirahat sekarang" (back to work, Timer_D reset), "Ukur ulang", and "Batal" at any
+//  moment (measuring or result): back to WORK_MODE, Timer_D kept.
+//  No single fatigue score, no "kelelahan" label. HR is shown small, pNN50 never.
 //
 //  Props: g = result of useGlassesSession()
 // ─────────────────────────────────────────────
 
 import { useState } from 'react'
 import { Card } from './Card'
+import { Btn } from './Btn'
+import { WindowDots } from './WindowDots'
+import { PpgScope } from './PpgScope'
 import { RingProgress } from './RingProgress'
 import { hasContact } from '../services/glassesSession'
+import { CHECK_STATUS } from '../services/decision'
+import { isBaselineStale } from '../services/baselineStore'
+import { STATUS_TEXT, NOT_MEDICAL, causeText, validText } from '../services/measureMessages'
 
-const REASONS = {
-  too_short: 'Not enough data was collected.',
-  no_signal: 'No pulse signal was found. Make sure the glasses sit snugly against your skin.',
-  too_few_beats: 'Too few heartbeats were detected.',
-  too_noisy: 'The signal was too noisy. Sit still during the measurement.',
-  data_loss: 'Bluetooth dropped too many samples.',
+const TONE = {
+  warn: 'bg-warning-surface border-warning-line text-warning-deep',
+  soft: 'bg-info-surface border-info-line text-info-strong',
+  ok: 'bg-ok-surface border-ok-line text-ok-deep',
+  invalid: 'bg-mist border-line text-ink-medium',
 }
-const LABELS = { rmssd: 'RMSSD', sdnn: 'SDNN', pnn50: 'pNN50' }
-const UNITS = { rmssd: 'ms', sdnn: 'ms', pnn50: '%' }
 
-const Btn = ({ onClick, children, kind = 'primary', disabled }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    className={`px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${
-      kind === 'primary' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-white border border-[#dbe6f7] text-slate-700 hover:bg-slate-50'
-    }`}
-  >
-    {children}
-  </button>
-)
+const pctText = (v) => (Number.isFinite(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(0)}%` : '—')
+const ms = (v) => (Number.isFinite(v) ? `${v.toFixed(1)} ms` : '—')
 
 export function CheckModeScreen({ g }) {
   const { s, session } = g
-  const { outcome, progress } = s.check
+  const { outcome, progress, windows } = s.check
   const [busy, setBusy] = useState(false)
-  const totalS = session.cfg.checkMs / 1000
+  const nWin = session.cfg.checkWindows
+  const totalS = (session.cfg.windowMs / 1000) * nWin
   const contact = hasContact(g.ppg)
+  const oldBaseline = s.baseline && isBaselineStale(s.baseline)
 
   const run = async (fn) => { setBusy(true); try { await fn() } finally { setBusy(false) } }
 
@@ -48,86 +48,92 @@ export function CheckModeScreen({ g }) {
   if (!outcome) {
     const left = Math.ceil(totalS * (1 - progress))
     return (
-      <Card title="Fatigue check" dot="#f59e0b" className="max-w-3xl mx-auto w-full">
+      <Card title="Cek kondisi" dot="#f59e0b" className="max-w-3xl mx-auto w-full">
         <div className="flex flex-col items-center gap-4 text-center py-4">
-          <h3 className="m-0 text-lg font-extrabold text-slate-800">Measuring… please sit still</h3>
-          <p className="m-0 text-sm text-slate-500 max-w-md">Relax and breathe normally for about {Math.round(totalS / 60 * 10) / 10 || 1} minutes.</p>
-          <RingProgress value={progress} color="#f59e0b" label={`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} sub="remaining" />
-          {!g.offline && !contact && (
-            <p className="m-0 text-sm font-semibold text-amber-700">Weak signal – check that the glasses sit snugly.</p>
-          )}
-          {g.offline && (
-            <p className="m-0 text-sm font-semibold text-amber-700">Connection lost – the measurement restarts when the glasses reconnect.</p>
-          )}
+          <h3 className="m-0 text-lg font-extrabold text-ink-strong">Mengukur… tahan diam</h3>
+          <p className="m-0 text-sm text-ink-muted max-w-md">
+            Kacamata tetap di meja, ujung jari telunjuk menempel pada sensor dengan tekanan sedang.
+            Jangan menggeser jari, jangan mengetuk meja.
+          </p>
+          <RingProgress value={progress} color="#f59e0b" label={`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} sub="tersisa" />
+          <div className="w-full max-w-xl"><PpgScope session={session} contact={contact} /></div>
+          <WindowDots total={nWin} windows={windows} progress={progress} />
+          {!g.offline && !contact && <p className="m-0 text-sm font-semibold text-warning-strong">Jari terlepas. Tempel lagi dan tahan.</p>}
+          <Btn kind="secondary" disabled={busy} onClick={() => run(() => session.cancelCheck())}>Batal</Btn>
         </div>
       </Card>
     )
   }
 
-  // ── failed measurement ──
-  if (!outcome.ok) {
-    return (
-      <Card title="Fatigue check" dot="#f59e0b" className="max-w-3xl mx-auto w-full">
-        <div className="flex flex-col items-center gap-4 text-center py-4">
-          <h3 className="m-0 text-lg font-extrabold text-slate-800">Measurement failed</h3>
-          <p className="m-0 text-sm text-slate-500 max-w-md">{REASONS[outcome.reason] || 'Something went wrong.'}</p>
-          <div className="flex gap-2">
-            <Btn onClick={() => session.retryCheck()}>Measure again</Btn>
-            <Btn kind="secondary" disabled={busy || g.offline} onClick={() => run(() => session.continueWork())}>Back to work</Btn>
-          </div>
-          {g.error && <p className="m-0 text-sm text-amber-700">{g.error}</p>}
-        </div>
-      </Card>
-    )
-  }
+  const st = STATUS_TEXT[outcome.status]
+  const invalid = outcome.status === CHECK_STATUS.INVALID
+  const cause = causeText(outcome.cause)
 
-  // ── result ──
-  const fatigued = outcome.fatigued
-  const m = outcome.cmp.metrics
   return (
-    <Card title="Fatigue check" dot={fatigued ? '#ef4444' : '#22c55e'} className="max-w-3xl mx-auto w-full">
+    <Card title="Cek kondisi" dot={invalid ? '#94a3b8' : outcome.status === CHECK_STATUS.DROP ? '#f59e0b' : '#22c55e'} className="max-w-3xl mx-auto w-full">
       <div className="flex flex-col items-center gap-4 text-center py-4">
-        <div className={`rounded-2xl px-5 py-3 border ${fatigued ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
-          <div className="text-2xl font-extrabold">{fatigued ? 'Fatigue Detected' : 'No fatigue detected'}</div>
-          <div className="text-sm">
-            {fatigued ? 'Your HRV dropped clearly below your baseline. Consider taking a break.' : 'Your HRV is close to your baseline.'}
+        <div className={`rounded-2xl px-5 py-3 border max-w-md ${TONE[st.tone]}`}>
+          <div className="text-xl font-extrabold">{st.title}</div>
+          <div className="text-sm">{invalid ? (outcome.reason === 'no_baseline' ? 'Belum ada baseline hari ini.' : `${cause.msg} ${cause.tip}`) : st.text}</div>
+        </div>
+
+        {!invalid && (
+          <table className="text-sm w-full max-w-md">
+            <thead>
+              <tr className="text-ink-muted text-xs">
+                <th className="text-left font-semibold py-1">Indikator</th>
+                <th className="font-semibold">Baseline</th>
+                <th className="font-semibold">Sekarang</th>
+                <th className="font-semibold">Perubahan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[['RMSSD', outcome.rmssd], ['SDNN', outcome.sdnn]].map(([label, m]) => (
+                <tr key={label} className="border-t border-line-faint">
+                  <td className="text-left py-1.5 font-semibold text-ink-medium">{label}</td>
+                  <td className="tabular-nums">{ms(m.base)}</td>
+                  <td className="tabular-nums">{ms(m.cur)}</td>
+                  <td className={`tabular-nums font-bold ${m.changePct <= -outcome.dropThr * 100 ? 'text-warning-strong' : 'text-ink-soft'}`}>
+                    {pctText(m.changePct)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <div className="flex flex-col items-center gap-1">
+          <WindowDots total={nWin} windows={outcome.windows} progress={1} />
+          <div className="text-caption text-ink-muted">
+            Kualitas: {validText(outcome.validWindows, outcome.totalWindows)}
+            {!invalid && Number.isFinite(outcome.hrBpm?.cur) && <> · HR {outcome.hrBpm.cur.toFixed(0)} bpm</>}
           </div>
         </div>
 
-        <table className="text-sm w-full max-w-md">
-          <thead>
-            <tr className="text-slate-500 text-xs">
-              <th className="text-left font-semibold py-1">Indicator</th>
-              <th className="font-semibold">Baseline</th>
-              <th className="font-semibold">Now</th>
-              <th className="font-semibold">Change</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.keys(LABELS).map((k) => (
-              <tr key={k} className="border-t border-[#e8eef9]">
-                <td className="text-left py-1.5 font-semibold text-slate-700">{LABELS[k]}</td>
-                {m[k].usable ? (
-                  <>
-                    <td className="tabular-nums">{m[k].base.toFixed(1)} {UNITS[k]}</td>
-                    <td className="tabular-nums">{m[k].cur.toFixed(1)} {UNITS[k]}</td>
-                    <td className={`tabular-nums font-bold ${m[k].dropped ? 'text-red-600' : 'text-slate-600'}`}>
-                      {m[k].dropPct > 0 ? '−' : '+'}{Math.abs(m[k].dropPct).toFixed(0)}%
-                    </td>
-                  </>
-                ) : (
-                  <td colSpan={3} className="text-slate-400">not usable</td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {oldBaseline && (
+          <p className="m-0 text-caption text-ink-muted max-w-md">Dibandingkan dengan baseline tanggal {s.baseline.dateKey}.</p>
+        )}
 
         <div className="flex gap-2 flex-wrap justify-center">
-          <Btn disabled={busy || g.offline} onClick={() => run(() => session.continueWork())}>Continue working</Btn>
-          <Btn kind="secondary" disabled={busy} onClick={() => run(() => session.endSession())}>End session</Btn>
+          {invalid ? (
+            <Btn onClick={() => session.retryCheck()}>Ukur ulang</Btn>
+          ) : (
+            <Btn disabled={busy || g.offline} onClick={() => run(() => session.continueWork())}>Istirahat sekarang</Btn>
+          )}
+          {!invalid && <Btn kind="secondary" onClick={() => session.retryCheck()}>Ukur ulang</Btn>}
+          <Btn kind="secondary" disabled={busy || g.offline} onClick={() => run(() => session.continueWork())}>
+            {invalid ? 'Kembali bekerja' : 'Lanjut bekerja'}
+          </Btn>
         </div>
-        {g.error && <p className="m-0 text-sm text-amber-700">{g.error}</p>}
+        <button
+          disabled={busy || g.offline}
+          onClick={() => run(() => session.endSession())}
+          className="text-xs text-ink-muted underline cursor-pointer disabled:opacity-50 bg-transparent border-0"
+        >
+          Akhiri sesi
+        </button>
+        {g.error && <p className="m-0 text-sm text-warning-strong">{g.error}</p>}
+        <p className="m-0 text-caption text-ink-faint max-w-md">{NOT_MEDICAL}</p>
       </div>
     </Card>
   )

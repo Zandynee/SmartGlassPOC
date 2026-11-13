@@ -10,8 +10,10 @@
 //    tof   19b10001  Read/Notify  {"distance_cm":x,"status":"…"}          (WORK_MODE only)
 //    imu   19b10002  Read/Notify  {"pitch_deg":x,"fhp_status":"…"}        (BASELINE + WORK)
 //    ppg   19b10003  Read/Notify  {"ir":x,"red":x,"contact_status":"…"}   (BASELINE + CHECK, ~100 Hz)
-//    state 19b10004  Read/Notify  "BASELINE_CREATION" | "WORK_MODE" | "CHECK_MODE"
-//    cmd   19b10005  Write        1 = go to WORK_MODE, 2 = go to CHECK_MODE
+//    state 19b10004  Read/Notify  "BASELINE_CREATION" | "WORK_MODE" | "CHECK_MODE" | "IDLE"
+//    cmd   19b10005  Write        1 = WORK_MODE, 2 = CHECK_MODE, 3 = IDLE
+//    Firmware only accepts: BASELINE→WORK, WORK→CHECK|IDLE, CHECK→WORK|IDLE, IDLE→WORK.
+//    A rejected command is answered by re-notifying the CURRENT state.
 // ─────────────────────────────────────────────
 
 export const BLE_DEVICE_NAME     = 'SmartGlasses'
@@ -27,12 +29,14 @@ export const GLASSES_STATE = Object.freeze({
   BASELINE_CREATION: 'BASELINE_CREATION',
   WORK_MODE:         'WORK_MODE',
   CHECK_MODE:        'CHECK_MODE',
+  IDLE:              'IDLE',          // session ended: all sensors + haptic off
 })
 
 /** Bytes the app may write to cmdChar. */
 export const CMD = Object.freeze({
   GO_WORK_MODE:  1,
   GO_CHECK_MODE: 2,
+  GO_IDLE:       3,
 })
 
 /** Raw PPG notification rate the firmware sends in BASELINE_CREATION / CHECK_MODE. */

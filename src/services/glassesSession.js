@@ -3,11 +3,19 @@
 //
 //    GlassesBle (link, state sync, cmd writes)
 //      └─▶ GlassesSession ──▶ glassesMachine reducer (UI state)
-//             • records raw PPG (hrv.js) in BASELINE_CREATION and CHECK_MODE
+//             • records raw PPG (hrv.js) in BASELINE_CREATION and CHECK_MODE, cut into
+//               non-overlapping 60 s windows (each analysed on its own)
+//             • baseline = 6 windows (>=5 valid, medians); check = 3 windows (>=2 valid)
 //             • samples IMU pitch for the upright baseline
 //             • saves the baseline, then writes cmd 1 (WORK_MODE)
-//             • Timer_D in WORK_MODE → "Check fatigue now?" → cmd 2
-//             • CHECK_MODE: HRV vs baseline → fatigue outcome
+//             • a check starts when the USER asks (button, or "Mau cek sekarang?" after Timer_D) → cmd 2;
+//               startCheck() works any time in WORK_MODE, cancelCheck() backs out any time
+//             • CHECK_MODE: median RMSSD/SDNN vs baseline → decision.js
+//             • never in check mode while offline (reducer) and never in check mode unasked:
+//               if the firmware is in CHECK_MODE and no check was requested → cmd 1
+//             • baseline wizard from the dashboard ("rebase"): per part choose NEW or the EXISTING
+//               HRV / posture baseline; the glasses only go to CHECK_MODE for a new HRV recording
+//               (the firmware only re-enters BASELINE_CREATION on boot)
 //
 //  Everything is plain JS so it runs (and is tested) in Node; the React side is
 //  hooks/useGlassesSession.js (useSyncExternalStore).
@@ -15,10 +23,12 @@
 
 import { GlassesBle, LINK, createTauriApi } from './bleService.js'
 import { CMD, GLASSES_STATE } from './bleConfig.js'
-import { PpgRecorder, compareHrv } from './hrv.js'
-import { loadBaseline, saveBaseline, clearBaseline, makeBaseline } from './baselineStore.js'
+import { PpgRecorder } from './hrv.js'
+import { PpgScopeBuffer } from './ppgScope.js'
+import { buildBaseline, decideCheck, summarizeWindow, DECISION_DEFAULTS } from './decision.js'
+import { loadBaseline, saveBaseline, clearBaseline, makeBaseline, isBaselineStale } from './baselineStore.js'
 import {
-  reducer, initialState, A, STEP, WIZ, WORK, CHECK_SECONDS, selectScreen,
+  reducer, initialState, A, STEP, WIZ, WORK, WINDOW_MS, BASELINE_WINDOWS, CHECK_WINDOWS, selectScreen,
 } from './glassesMachine.js'
 
 /** IR level that means "a finger is on the sensor" (MAX3010x: off ≈ <10 k, on ≈ >50 k). */
@@ -40,11 +50,14 @@ const sdSample = (a) => {
 }
 
 const DEFAULT_CONFIG = {
-  hrvMs: WIZ.HRV_MS,
+  windowMs: WINDOW_MS,                   // one analysis window
+  baselineWindows: BASELINE_WINDOWS,     // 6
+  checkWindows: CHECK_WINDOWS,           // 3
+  decision: {},                          // overrides for decision.js: dropThr, minValidBaselineWindows, minValidCheckWindows
+  hrvOpts: undefined,                    // overrides for analyzePpg (tests / tuning)
   postureMs: WIZ.POSTURE_MS,
   contactStableMs: WIZ.CONTACT_STABLE_MS,
   contactLossMs: WIZ.CONTACT_LOSS_MS,
-  checkMs: CHECK_SECONDS * 1000,
   promptAfterS: WORK.PROMPT_AFTER_S,
   snoozeS: WORK.SNOOZE_S,
   progressEveryMs: 400,
@@ -67,8 +80,19 @@ export class GlassesSession {
     this.enabled = false
     this.actionError = null
 
-    this.hrvRec = new PpgRecorder()
-    this.checkRec = new PpgRecorder()
+    // decision parameters (handoff: every threshold is configurable, e.g. drop_thr = dropThr)
+    this.params = {
+      ...DECISION_DEFAULTS,
+      baselineWindows: this.cfg.baselineWindows,
+      checkWindows: this.cfg.checkWindows,
+      ...this.cfg.decision,
+    }
+    this.scope = new PpgScopeBuffer(10)   // last 10 s of raw PPG for the live oscilloscope (components/PpgScope)
+    this.hrvRec = new PpgRecorder({ maxSeconds: this.cfg.windowMs / 1000 * 1.5 })    // current baseline window
+    this.checkRec = new PpgRecorder({ maxSeconds: this.cfg.windowMs / 1000 * 1.5 })  // current check window
+    this._baseWins = []
+    this._checkWins = []
+    this._windowLost = false
     this._contactSince = null
     this._lostSince = null
     this._postureBuf = []
@@ -76,6 +100,7 @@ export class GlassesSession {
     this._lastProgress = 0
     this._lastPpgPublish = 0
     this._sendingWork = false
+    this._leaving = false
     this._retryTimer = null
     this._tickTimer = null
     this._lastTick = 0
@@ -143,9 +168,15 @@ export class GlassesSession {
   _after(prev, next) {
     // entering a firmware state
     if (prev.fw !== next.fw) {
-      if (next.fw === GLASSES_STATE.CHECK_MODE) this._resetCheck()
+      if (next.fw === GLASSES_STATE.CHECK_MODE) { this._resetCheck(); this.scope.reset() }
       if (next.fw === GLASSES_STATE.BASELINE_CREATION) this._resetWizardBuffers()
     }
+    // firmware sits in CHECK_MODE but nobody asked for it (reconnect after a drop, stale state) → back to work
+    if (next.fw === GLASSES_STATE.CHECK_MODE && !next.checkWanted && !next.rebase) this._leaveCheck()
+    // wizard reached a new HRV recording → the glasses must stream PPG (rebase only; boot is already BASELINE_CREATION)
+    if (next.rebase && next.wiz.step === STEP.FINGER && prev.wiz.step !== STEP.FINGER &&
+        next.fw !== GLASSES_STATE.CHECK_MODE && next.fw !== GLASSES_STATE.BASELINE_CREATION) this._enterMeasureMode()
+    if (!prev.rebase && next.rebase) this._resetWizardBuffers()
     // entering posture sampling
     if (prev.wiz.step !== STEP.POSTURE && next.wiz.step === STEP.POSTURE) {
       this._postureBuf = []; this._postureT0 = null; this._lastProgress = 0
@@ -159,12 +190,15 @@ export class GlassesSession {
 
   _resetWizardBuffers() {
     this.hrvRec.reset()
+    this._baseWins = []
+    this._windowLost = false
     this._contactSince = null
     this._lostSince = null
     this._lastProgress = 0
   }
   _resetCheck() {
     this.checkRec.reset()
+    this._checkWins = []
     this._lastProgress = 0
   }
 
@@ -172,25 +206,31 @@ export class GlassesSession {
     const s = this.state
     this.dispatch({ type: A.LINK_CHANGED, link: l })
     if (l !== LINK.ONLINE) {
+      this.scope.reset()
+      this._resetCheck()      // the reducer already dropped the check / refresh and fell back to WORK_MODE
       // A measurement with a hole in it is worthless, but nothing else is cleared.
-      if (s.wiz.step === STEP.HRV && s.fw === GLASSES_STATE.BASELINE_CREATION) {
+      if (s.wiz.step === STEP.HRV && this._wizardRecording(s)) {
         this.dispatch({ type: A.WIZ_HRV_RESULT, result: { ok: false, reason: 'link_lost' } })
       } else if (s.wiz.step === STEP.POSTURE) {
         this.dispatch({ type: A.WIZ_POSTURE_RESULT, posture: null })
       }
     } else {
       this.actionError = null
-      // reconnected in the middle of a check → measure again from zero
-      if (this.state.fw === GLASSES_STATE.CHECK_MODE && !this.state.check.outcome) this.retryCheck()
     }
     this._maybeSendWork()
+  }
+
+  /** The wizard collects data while the firmware is in BASELINE_CREATION (boot) or, for the daily refresh, CHECK_MODE. */
+  _wizardRecording(s) {
+    return s.fw === GLASSES_STATE.BASELINE_CREATION ||
+      (s.rebase && (s.fw === GLASSES_STATE.CHECK_MODE || s.fw === GLASSES_STATE.WORK_MODE))
   }
 
   // ── IMU: posture sampling in the wizard ───
   _onImu(p) {
     this.imu = p
     const s = this.state
-    if (s.wiz.step === STEP.POSTURE && s.fw === GLASSES_STATE.BASELINE_CREATION) {
+    if (s.wiz.step === STEP.POSTURE && this._wizardRecording(s)) {
       if (this._postureT0 == null) this._postureT0 = p.t
       this._postureBuf.push(p.pitchDeg)
       const progress = Math.min(1, (p.t - this._postureT0) / this.cfg.postureMs)
@@ -208,16 +248,35 @@ export class GlassesSession {
     this._publish()
   }
 
-  // ── PPG: HRV baseline + fatigue check ─────
+  // ── PPG: windowed HRV baseline + check ────
   _onPpg(p) {
     this.ppg = p
+    this.scope.push(p.ir, hasContact(p))
     const s = this.state
 
-    if (s.fw === GLASSES_STATE.BASELINE_CREATION) this._ppgBaseline(p, s)
-    else if (s.fw === GLASSES_STATE.CHECK_MODE && !s.check.outcome) this._ppgCheck(p)
+    if (this._wizardRecording(s)) this._ppgBaseline(p, s)
+    else if (s.fw === GLASSES_STATE.CHECK_MODE && s.checkWanted && !s.check.outcome) this._ppgCheck(p)
 
     // 100 Hz is too fast for React; publish ~4 Hz
     if (p.t - this._lastPpgPublish >= 250) { this._lastPpgPublish = p.t; this._publish() }
+  }
+
+  /** Close the current window of `rec`: analyse it and keep the small summary. */
+  _closeWindow(rec, wins, lostReason = null) {
+    let w
+    if (lostReason) w = { ok: false, reason: lostReason, hrBpm: null, sdnn: null, rmssd: null }
+    else {
+      const res = rec.analyze(this.cfg.hrvOpts)
+      if (import.meta.env?.DEV) { console.log(`window ${wins.length + 1}:`, res.ok ? 'ok' : res.reason, res.quality) }
+      w = summarizeWindow(res)
+    }
+    wins.push(w)
+    rec.reset()
+    return w
+  }
+
+  _tooManyInvalid(wins, total, minValid) {
+    return wins.filter((w) => !w.ok).length > total - minValid
   }
 
   _ppgBaseline(p, s) {
@@ -229,6 +288,8 @@ export class GlassesSession {
       this._contactSince ??= p.t
       if (p.t - this._contactSince >= this.cfg.contactStableMs) {
         this.hrvRec.reset()
+        this._baseWins = []
+        this._windowLost = false
         this._lostSince = null
         this._lastProgress = 0
         this.dispatch({ type: A.WIZ_CONTACT, ok: true })
@@ -238,56 +299,70 @@ export class GlassesSession {
 
     if (step !== STEP.HRV) return
 
-    if (contact) this._lostSince = null
+    // Finger off for a while: the window in progress is lost (not stitched), the next one starts on return.
+    if (contact) { this._lostSince = null; this._windowLost = false }
     else {
       this._lostSince ??= p.t
-      if (p.t - this._lostSince >= this.cfg.contactLossMs) {
-        this.dispatch({ type: A.WIZ_CONTACT, ok: false })   // → FINGER (buffers reset in _after)
-        return
+      if (p.t - this._lostSince >= this.cfg.contactLossMs && !this._windowLost) {
+        this._windowLost = true
+        this._closeWindow(this.hrvRec, this._baseWins, 'no_contact')
+        if (this._finishBaselineIfDone()) return
+        this._emitBaselineProgress(p)
       }
     }
+    if (this._windowLost) return
 
     this.hrvRec.push(p.ir, p.t)
-    const progress = Math.min(1, this.hrvRec.elapsedMs / this.cfg.hrvMs)
-    if (progress >= 1) {
-      const res = this.hrvRec.analyze(this.cfg.hrvOpts)
-      if (import.meta.env?.DEV) {
-        console.table(res.quality); console.log('reason:', res.reason)
-        window.__ppgDump = { ir: [...this.hrvRec.ir], ts: [...this.hrvRec.ts], res }
-      }
-      this.dispatch({ type: A.WIZ_HRV_RESULT, result: res })
-    } else if (p.t - this._lastProgress >= this.cfg.progressEveryMs) {
-      this._lastProgress = p.t
-      this.dispatch({ type: A.WIZ_HRV_PROGRESS, progress })
+    if (this.hrvRec.elapsedMs >= this.cfg.windowMs) {
+      this._closeWindow(this.hrvRec, this._baseWins)
+      if (this._finishBaselineIfDone()) return
+      this._lastProgress = 0
     }
+    if (p.t - this._lastProgress >= this.cfg.progressEveryMs) this._emitBaselineProgress(p)
+  }
+
+  _emitBaselineProgress(p) {
+    this._lastProgress = p.t
+    const total = this.cfg.baselineWindows
+    const progress = Math.min(1, (this._baseWins.length + Math.min(1, this.hrvRec.elapsedMs / this.cfg.windowMs)) / total)
+    this.dispatch({ type: A.WIZ_HRV_PROGRESS, progress, windows: [...this._baseWins] })
+  }
+
+  _finishBaselineIfDone() {
+    const total = this.cfg.baselineWindows
+    const wins = this._baseWins
+    if (wins.length < total && !this._tooManyInvalid(wins, total, this.params.minValidBaselineWindows)) return false
+    const result = buildBaseline(wins, this.params)
+    this.dispatch({ type: A.WIZ_HRV_RESULT, result })
+    return true
   }
 
   _ppgCheck(p) {
     this.checkRec.push(p.ir, p.t)
-    const progress = Math.min(1, this.checkRec.elapsedMs / this.cfg.checkMs)
-    if (progress < 1) {
-      if (p.t - this._lastProgress >= this.cfg.progressEveryMs) {
-        this._lastProgress = p.t
-        this.dispatch({ type: A.CHECK_PROGRESS, progress })
+    if (this.checkRec.elapsedMs >= this.cfg.windowMs) {
+      this._closeWindow(this.checkRec, this._checkWins)
+      const total = this.cfg.checkWindows
+      if (this._checkWins.length >= total || this._tooManyInvalid(this._checkWins, total, this.params.minValidCheckWindows)) {
+        const outcome = decideCheck(this.state.baseline, this._checkWins, this.params)
+        this.dispatch({ type: A.CHECK_PROGRESS, progress: 1, windows: [...this._checkWins] })
+        this.dispatch({ type: A.CHECK_RESULT, outcome })
+        return
       }
-      return
+      this._lastProgress = 0
     }
-    const cur = this.checkRec.analyze()
-    let outcome
-    if (!cur.ok) outcome = { ok: false, reason: cur.reason }
-    else {
-      const cmp = compareHrv(this.state.baseline?.hrv, cur)
-      outcome = { ok: true, fatigued: cmp.fatigued, cmp, current: cur }
+    if (p.t - this._lastProgress >= this.cfg.progressEveryMs) {
+      this._lastProgress = p.t
+      const total = this.cfg.checkWindows
+      const progress = Math.min(1, (this._checkWins.length + Math.min(1, this.checkRec.elapsedMs / this.cfg.windowMs)) / total)
+      this.dispatch({ type: A.CHECK_PROGRESS, progress, windows: [...this._checkWins] })
     }
-    this.dispatch({ type: A.CHECK_PROGRESS, progress: 1 })
-    this.dispatch({ type: A.CHECK_RESULT, outcome })
   }
 
   // ── baseline persistence → WORK_MODE ──────
   _saveBaseline() {
     const { hrvResult, posture } = this.state.wiz
     try {
-      const b = saveBaseline(makeBaseline(hrvResult, posture))
+      const b = saveBaseline(makeBaseline(hrvResult, posture, { fitness: this.state.wiz.fitness, windowS: this.cfg.windowMs / 1000 }))
       this.dispatch({ type: A.BASELINE_SAVED, baseline: b })
     } catch (e) {
       this.dispatch({ type: A.BASELINE_SAVE_FAILED, error: e?.message || 'save_failed' })
@@ -298,7 +373,10 @@ export class GlassesSession {
   _maybeSendWork() {
     const s = this.state
     if (this._sendingWork) return
-    if (s.wiz.step !== STEP.DONE || s.fw !== GLASSES_STATE.BASELINE_CREATION || s.link !== LINK.ONLINE) return
+    // refresh finished while the glasses never left WORK_MODE (both/posture-only reuse): nothing to send
+    if (s.rebase && s.wiz.step === STEP.DONE && s.fw === GLASSES_STATE.WORK_MODE) { this.dispatch({ type: A.REBASE_END }); return }
+    const waiting = s.fw === GLASSES_STATE.BASELINE_CREATION || (s.rebase && s.fw === GLASSES_STATE.CHECK_MODE)
+    if (s.wiz.step !== STEP.DONE || !waiting || s.link !== LINK.ONLINE) return
     this._sendingWork = true
     this.ble.goTo(CMD.GO_WORK_MODE, GLASSES_STATE.WORK_MODE)
       .then(() => { this.actionError = null })
@@ -315,7 +393,7 @@ export class GlassesSession {
     const now = Date.now()
     const dtS = Math.min(5, (now - this._lastTick) / 1000)   // a sleeping PC must not count
     this._lastTick = now
-    this.dispatch({ type: A.TICK, dtS, promptAfterS: this.cfg.promptAfterS })
+    this.dispatch({ type: A.TICK, dtS, promptAfterS: this.cfg.promptAfterS, canPrompt: !isBaselineStale(this.state.baseline) && !this.state.rebase && !this.state.checkWanted })
   }
 
   // ── actions for the UI ────────────────────
@@ -329,20 +407,84 @@ export class GlassesSession {
   readyPosture() { this.dispatch({ type: A.WIZ_READY_POSTURE }) }
   retryPosture() { this.dispatch({ type: A.WIZ_RETRY_POSTURE }) }
   restartWizard() { this.dispatch({ type: A.WIZ_RESTART }) }
+  answerFitness(value) { this.dispatch({ type: A.WIZ_FITNESS, value }) }
+  /** Wizard, only when a baseline exists: 'new' measures, 'existing' keeps the stored part. */
+  chooseHrv(mode) { this.dispatch({ type: A.WIZ_CHOOSE_HRV, mode }) }
+  choosePosture(mode) { this.dispatch({ type: A.WIZ_CHOOSE_POSTURE, mode }) }
+  /** Shortcut: keep both parts of the stored baseline (re-confirmed for today). */
   useSavedBaseline() { this.dispatch({ type: A.WIZ_USE_SAVED }) }
+
+  /**
+   * Open the baseline wizard from the dashboard (any time). The glasses are only switched to
+   * CHECK_MODE when the user reaches a new HRV recording (see _after → _enterMeasureMode).
+   */
+  startRebase() {
+    if (this.state.rebase || this.state.checkWanted || this.state.sessionEnded) return false
+    this.dispatch({ type: A.REBASE_START })
+    return true
+  }
+  async _enterMeasureMode() {
+    const ok = await this._run(() => this.ble.goTo(CMD.GO_CHECK_MODE, GLASSES_STATE.CHECK_MODE))
+    if (!ok) this.dispatch({ type: A.REBASE_CANCEL })
+  }
+  /** Leave the wizard at any time; back to WORK_MODE if the glasses were switched to CHECK_MODE for it. */
+  cancelRebase() {
+    this.dispatch({ type: A.REBASE_CANCEL })
+    if (this.state.fw === GLASSES_STATE.CHECK_MODE) this._leaveCheck()
+  }
 
   resetBaseline() {
     clearBaseline()
     this.dispatch({ type: A.BASELINE_CLEARED })
   }
 
-  /** "Check fatigue now?" → yes writes cmd 2 and waits for CHECK_MODE. */
+  /** "Mau cek sekarang?" → yes starts a check (same as the button). */
   async answerPrompt(yes) {
     this.dispatch({ type: A.PROMPT_ANSWER, yes, snoozeS: this.cfg.snoozeS })
     if (!yes) return true
+    return this._beginCheck(() => this.dispatch({ type: A.PROMPT_RETRY }))
+  }
+
+  /** Check button: any time in WORK_MODE, no waiting for Timer_D. Needs a baseline and a live link. */
+  async startCheck() {
+    const s = this.state
+    if (!s.baseline || s.rebase || s.checkWanted || s.sessionEnded) return false
+    if (s.fw !== GLASSES_STATE.WORK_MODE || s.link !== LINK.ONLINE) {
+      this.actionError = 'Kacamata belum terhubung.'
+      this._publish()
+      return false
+    }
+    return this._beginCheck()
+  }
+
+  async _beginCheck(onFail) {
+    this.dispatch({ type: A.CHECK_WANTED })           // BEFORE the write, so the CHECK_MODE event is "wanted"
     const ok = await this._run(() => this.ble.goTo(CMD.GO_CHECK_MODE, GLASSES_STATE.CHECK_MODE))
-    if (!ok) this.dispatch({ type: A.PROMPT_RETRY })
+    if (!ok) { this.dispatch({ type: A.CHECK_CANCEL, snoozeS: 0 }); onFail?.() }
     return ok
+  }
+
+  /** Back out of a check at any moment (measuring or result). Timer_D is kept. */
+  async cancelCheck() {
+    this.dispatch({ type: A.CHECK_CANCEL, snoozeS: this.cfg.snoozeS })
+    if (this.state.fw === GLASSES_STATE.CHECK_MODE) await this._leaveCheck()
+    return true
+  }
+
+  /** cmd 1 until the firmware confirms WORK_MODE (retried while the link is up and the firmware is still in CHECK_MODE). */
+  async _leaveCheck() {
+    if (this._leaving) return
+    this._leaving = true
+    try {
+      const ok = await this._run(() => this.ble.goTo(CMD.GO_WORK_MODE, GLASSES_STATE.WORK_MODE))
+      if (!ok) {
+        clearTimeout(this._retryTimer)
+        this._retryTimer = setTimeout(() => {
+          const s = this.state
+          if (s.fw === GLASSES_STATE.CHECK_MODE && !s.checkWanted && !s.rebase && s.link === LINK.ONLINE) this._leaveCheck()
+        }, 2000)
+      }
+    } finally { this._leaving = false }
   }
 
   /** After a check: back to WORK_MODE (cmd 1). Timer_D restarts. */
@@ -352,13 +494,19 @@ export class GlassesSession {
     return ok
   }
 
-  /** After a check: stop for the day. PPG is powered down (cmd 1), Timer_D stops. */
+  /** Stop for the day: firmware → IDLE (cmd 3, sensors + haptic off). Only ends once confirmed. */
   async endSession() {
-    await this._run(() => this.ble.goTo(CMD.GO_WORK_MODE, GLASSES_STATE.WORK_MODE))
-    this.dispatch({ type: A.END_SESSION })
+    const ok = await this._run(() => this.ble.goTo(CMD.GO_IDLE, GLASSES_STATE.IDLE))
+    if (ok) this.dispatch({ type: A.END_SESSION })
+    return ok
   }
 
-  startSession() { this.dispatch({ type: A.START_SESSION }) }
+  /** Resume after "session ended": firmware IDLE → WORK_MODE (cmd 1), confirmed before the UI resumes. */
+  async startSession() {
+    const ok = await this._run(() => this.ble.goTo(CMD.GO_WORK_MODE, GLASSES_STATE.WORK_MODE))
+    if (ok) this.dispatch({ type: A.START_SESSION })
+    return ok
+  }
 
   /** Baseline save failed (storage error) → try again. */
   retrySave() { this._saveBaseline() }

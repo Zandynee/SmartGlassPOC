@@ -35,6 +35,7 @@ export const LINK = Object.freeze({
 })
 
 const BACKOFF_MS = [2000, 3000, 5000, 8000]
+const HEARTBEAT_MS = 5000
 
 // ── packet parsers ──────────────────────────
 function toObj(payload) {
@@ -229,7 +230,17 @@ export class GlassesBle {
         this._setLink(LINK.ONLINE)
         attempt = 0
 
-        await down                    // block until the link drops
+        // Heartbeat: re-read stateChar periodically. Catches missed notifications and
+        // silent drops (OS never reported the disconnect) without waiting for a write to fail.
+        const hb = setInterval(async () => {
+          if (!alive() || this.link !== LINK.ONLINE) return
+          try { await this.readState(); this._hbFails = 0 }
+          catch {
+            if (++this._hbFails >= 2) { this._hbFails = 0; this._onDropped() }
+          }
+        }, HEARTBEAT_MS)
+        this._hbFails = 0
+        try { await down } finally { clearInterval(hb) }   // block until the link drops
       } catch (e) {
         if (alive()) this._emit('error', e instanceof Error ? e : new Error(String(e)))
       }
@@ -265,7 +276,7 @@ export class GlassesBle {
   /** Fire-and-forget write to cmdChar. Throws if the link is down. */
   async sendCommand(value) {
     if (this.link !== LINK.ONLINE) throw new Error('Glasses offline')
-    if (value !== CMD.GO_WORK_MODE && value !== CMD.GO_CHECK_MODE) throw new Error('Bad command ' + value)
+    if (!Object.values(CMD).includes(value)) throw new Error('Bad command ' + value)
     await this.api.writeCommand(value)
   }
 

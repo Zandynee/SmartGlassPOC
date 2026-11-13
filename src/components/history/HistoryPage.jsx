@@ -3,13 +3,16 @@
 //
 //   ┌──────────────── top bar (logo · tabs · bell · profile) ───────────────┐
 //   │ rail │  title + filters                                │ Log Harian    │
-//   │      │  ┌──────────── line chart ────────────┐         │ (sessions,    │
-//   │      │  └────────────────────────────────────┘         │  scrollable)  │
+//   │      │  ┌── graph: bpm ──┐ ┌── graph: cm ──┐ …         │ (sessions,    │
+//   │      │  └────────────────┘ └───────────────┘           │  scrollable)  │
 //   │      │  [ card ] [ card ] [ card ] [ card ]            │               │
 //   └──────┴─────────────────────────────────────────────────┴───────────────┘
 //
 //  Owns the UI state (timeframe, date, filters, active metrics). Data comes
 //  from useHistoryData; maths from utils/history.
+//
+//  One graph is drawn per UNIT OF MEASUREMENT: switching on Detak Jantung (bpm)
+//  and Jarak (cm) gives two graphs, never one graph with two different scales.
 //
 //  Props:
 //    onNavigate    – (tabId) => void   ('home' | 'history')
@@ -34,6 +37,8 @@ import { HistoryTopBar } from './HistoryTopBar'
 import { HistoryFilters } from './HistoryFilters'
 import { HistoryChart } from './HistoryChart'
 import { SummaryCards } from './SummaryCards'
+import { DailyChecks } from './DailyChecks'
+import { flattenChecks } from '../../utils/dailySummary'
 import { DailyLogs } from './DailyLogs'
 import { SessionDetail } from './SessionDetail'
 
@@ -41,6 +46,17 @@ const startOfToday = () => {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
   return d.getTime()
+}
+
+/** [hr, rmssd, distance] → [{ unit: 'bpm', metrics: [hr] }, …]  (order of first appearance) */
+function groupByUnit(metrics) {
+  const groups = []
+  for (const m of metrics) {
+    const group = groups.find((g) => g.unit === m.unit)
+    if (group) group.metrics.push(m)
+    else groups.push({ unit: m.unit, metrics: [m] })
+  }
+  return groups
 }
 
 export function HistoryPage({ onNavigate, notifications = [], connected = false, simulating = false }) {
@@ -55,7 +71,7 @@ export function HistoryPage({ onNavigate, notifications = [], connected = false,
   const [openId, setOpenId] = useState(null)
 
   const range = useMemo(() => getRange(timeframe, anchor, custom), [timeframe, anchor, custom])
-  const { allSessions, histories, loading, error, refresh, dropSession } = useHistoryData(range)
+  const { allSessions, histories, baselines, loading, error, refresh, dropSession } = useHistoryData(range)
 
   // "Filter Data" options come from the modes actually present in the database
   const modeOptions = useMemo(() => {
@@ -81,10 +97,15 @@ export function HistoryPage({ onNavigate, notifications = [], connected = false,
     [buckets, sessions, histories, range]
   )
 
+  const checks = useMemo(() => flattenChecks(sessions, histories, range), [sessions, histories, range])
+
   const activeMetrics = useMemo(
     () => METRICS.filter((m) => activeIds.includes(m.id)),
     [activeIds]
   )
+
+  // one graph per unit of measurement
+  const chartGroups = useMemo(() => groupByUnit(activeMetrics), [activeMetrics])
 
   // ── handlers ──
   const toggleMetric = useCallback((id) => {
@@ -120,7 +141,7 @@ export function HistoryPage({ onNavigate, notifications = [], connected = false,
     : { label: 'Tidak terhubung', tone: 'off' }
 
   return (
-    <div className="min-h-svh flex flex-col bg-[#eef4ff] text-left">
+    <div className="min-h-svh flex flex-col bg-page text-left">
       <HistoryTopBar
         tab="history"
         onNavigate={onNavigate}
@@ -151,16 +172,27 @@ export function HistoryPage({ onNavigate, notifications = [], connected = false,
             />
 
             {error && (
-              <p className="text-sm font-mono text-red-600 border border-red-300 bg-red-50 rounded-xl px-4 py-2">
+              <p className="text-sm font-mono text-danger border border-danger-line-strong bg-danger-surface rounded-xl px-4 py-2">
                 ✕ Gagal memuat riwayat: {error}
               </p>
             )}
 
-            <section className="rounded-2xl bg-white border border-[#dbe6f7] shadow-sm p-4 md:p-5 h-[clamp(320px,46vh,480px)]">
-              <HistoryChart points={points} unit={unit} metrics={activeMetrics} loading={loading} />
-            </section>
+            {/* ── One graph per unit ── */}
+            <div className={`grid grid-cols-1 gap-5 ${chartGroups.length > 1 ? '2xl:grid-cols-2' : ''}`}>
+              {chartGroups.map((group) => (
+                <section
+                  key={group.unit}
+                  aria-label={`Grafik dalam ${group.unit}`}
+                  className="rounded-2xl bg-white border border-line shadow-sm p-4 md:p-5 h-chart-panel"
+                >
+                  <HistoryChart points={points} unit={unit} metrics={group.metrics} loading={loading} />
+                </section>
+              ))}
+            </div>
 
             <SummaryCards summary={summary} />
+
+            <DailyChecks checks={checks} baselines={baselines} range={range} loading={loading} />
           </main>
 
           {/* ── Daily logs ── */}

@@ -14,8 +14,8 @@ export function RingProgress({ value = 0, label, sub, color = '#2563eb', size = 
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-2xl font-extrabold text-slate-800 tabular-nums">{label}</span>
-        {sub && <span className="text-[11px] text-slate-500">{sub}</span>}
+        <span className="text-2xl font-extrabold text-ink-strong tabular-nums">{label}</span>
+        {sub && <span className="text-caption text-ink-muted">{sub}</span>}
       </div>
     </div>
   )

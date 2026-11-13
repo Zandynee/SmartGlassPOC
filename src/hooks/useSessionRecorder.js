@@ -11,14 +11,15 @@
 //            A short drop + reconnect continues the SAME session.
 //  WORK_MODE every 500 ms, only with FRESH packets (no stale duplicates while
 //            offline): imu_readings (pitch + posture flag), tof_readings.
-//  CHECK     one `checks` row per finished check, plus one ppg_readings row
-//            (hr_bpm + a 0-100 fatigue_index) so the existing History metrics
-//            "Detak Jantung" and "Kelelahan" keep working unchanged.
+//  CHECK     one `checks` row per finished check (also INVALID ones: status 'INVALID'),
+//            plus one ppg_readings row with the median HR (History "Detak Jantung").
+//            There is no fatigue index any more: History shows the RMSSD change in %.
+//  BASELINE  one `baselines` row per baseline (daily; fitness 1-5, medians), stored once.
 // ─────────────────────────────────────────────
 
 import { useCallback, useEffect, useRef } from 'react'
 import {
-  startSession, endSession, insertImuReading, insertTofReading, insertPpgReading, insertCheck,
+  startSession, endSession, insertImuReading, insertTofReading, insertPpgReading, insertCheck, insertBaselineIfNew,
 } from '../services/db/sessions'
 import { LINK } from '../services/bleService'
 import { GLASSES_STATE } from '../services/bleConfig'
@@ -32,18 +33,22 @@ const GRACE_MS = 120_000
 const TOF_FAULT = /ERR|FAIL|FAULT|TIMEOUT|OUT_OF_RANGE|INVALID/i
 export const tofDbStatus = (s) => (s && TOF_FAULT.test(s) ? s : 'OK')
 
-/**
- * 0-100 index from a compareHrv() result: mean drop% × 3.75 (a 20 % drop ≈ 75).
- * Forced to agree with the verdict: fatigued → ≥ 75, not fatigued → ≤ 74.
- */
-export function fatigueIndexFromCmp(cmp) {
-  const drops = Object.values(cmp.metrics)
-    .filter((m) => m.usable && Number.isFinite(m.dropPct))
-    .map((m) => Math.max(0, m.dropPct))
-  const mean = drops.length ? drops.reduce((a, b) => a + b, 0) / drops.length : 0
-  let idx = Math.min(100, Math.round(mean * 3.75))
-  idx = cmp.fatigued ? Math.max(idx, 75) : Math.min(idx, 74)
-  return idx
+/** decision.decideCheck() output → the flat shape insertCheck() takes. */
+export function checkRowFromOutcome(o, workDurationS) {
+  return {
+    status: o.status,
+    hrBpm: o.hrBpm?.cur,
+    sdnn: o.sdnn?.cur,
+    rmssd: o.rmssd?.cur,
+    baseSdnn: o.sdnn?.base,
+    baseRmssd: o.rmssd?.base,
+    rmssdChangePct: o.rmssd?.changePct,
+    sdnnChangePct: o.sdnn?.changePct,
+    validWindows: o.validWindows,
+    totalWindows: o.totalWindows,
+    dropThr: o.dropThr,
+    workDurationS,
+  }
 }
 
 /**
@@ -53,12 +58,14 @@ export function fatigueIndexFromCmp(cmp) {
  * @param simulate     'simulate' vs 'ble' session mode
  * @param imu, tof     g.imu / g.tof  ({…, t})
  * @param fhpStatus    'POOR_POSTURE' | 'NORMAL'  (App computes it from the baseline)
- * @param outcome      g.s.check.outcome
+ * @param outcome      g.s.check.outcome (decision.decideCheck output)
+ * @param baseline     g.s.baseline (stored once in `baselines`)
+ * @param workDurationS g.s.work.timerS (Timer_D; still intact while the check runs)
  * @param sessionEnded g.s.sessionEnded
  */
-export function useSessionRecorder({ enabled, link, fw, simulate, imu, tof, fhpStatus, outcome, sessionEnded }) {
+export function useSessionRecorder({ enabled, link, fw, simulate, imu, tof, fhpStatus, outcome, baseline, workDurationS, sessionEnded }) {
   const latest = useRef({})
-  latest.current = { enabled, link, fw, simulate, imu, tof, fhpStatus, sessionEnded }
+  latest.current = { enabled, link, fw, simulate, imu, tof, fhpStatus, sessionEnded, workDurationS }
 
   const sid = useRef(null)        // open session id
   const opening = useRef(null)    // in-flight startSession promise
@@ -117,27 +124,24 @@ export function useSessionRecorder({ enabled, link, fw, simulate, imu, tof, fhpS
     return () => clearInterval(timer)
   }, [ensure])
 
-  // ── finished fatigue check → checks + ppg_readings ──
+  // ── baseline → `baselines` (once per baseline; the UNIQUE created_at ignores repeats) ──
   useEffect(() => {
-    if (!outcome || !outcome.ok || lastOutcome.current === outcome) return
+    if (!baseline) return
+    insertBaselineIfNew(baseline).catch((e) => console.error('Saving baseline failed:', e))
+  }, [baseline])
+
+  // ── finished check → checks (+ ppg_readings with the HR) ──
+  useEffect(() => {
+    if (!outcome || lastOutcome.current === outcome) return
     lastOutcome.current = outcome
     ;(async () => {
       try {
         const id = await ensure()
-        const { current: cur, cmp } = outcome
-        const m = cmp.metrics
-        const idx = fatigueIndexFromCmp(cmp)
-        await insertCheck(id, {
-          hrBpm: cur.hrBpm, sdnn: cur.sdnn, rmssd: cur.rmssd, pnn50: cur.pnn50,
-          baseHrBpm: cmp.hrDeltaBpm != null ? cur.hrBpm - cmp.hrDeltaBpm : null,
-          baseSdnn: m.sdnn.base, baseRmssd: m.rmssd.base, basePnn50: m.pnn50.base,
-          fatigueIndex: idx, fatigued: cmp.fatigued,
-          nIbis: cur.quality?.validIbis, durationS: cur.quality?.durationS,
-        })
-        await insertPpgReading(id, {
-          irRaw: null, redRaw: null, hrBpm: cur.hrBpm, hrDetectable: true,
-          fatigueIndex: idx, fatigueStatus: cmp.fatigued ? 'FATIGUED' : 'FRESH',
-        })
+        const row = checkRowFromOutcome(outcome, latest.current.workDurationS)
+        await insertCheck(id, row)
+        if (outcome.ok && Number.isFinite(row.hrBpm)) {
+          await insertPpgReading(id, { irRaw: null, redRaw: null, hrBpm: row.hrBpm, hrDetectable: true })
+        }
       } catch (e) {
         console.error('Saving check failed:', e)
       }

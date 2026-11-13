@@ -1,4 +1,4 @@
-import { execute, select } from './db'
+import { execute, select } from './db.js'
 
 export async function startSession(mode) {
   const { lastInsertId } = await execute(
@@ -28,13 +28,12 @@ export async function insertImuReading(sessionId, r) {
   )
 }
 
+/** v2: only the heart rate of a finished check (History "Detak Jantung"). Legacy fatigue columns stay NULL. */
 export async function insertPpgReading(sessionId, r) {
   await execute(
-    `INSERT INTO ppg_readings
-     (session_id, t, ir_raw, red_raw, hr_bpm, hr_detectable, fatigue_index, fatigue_status)
-     VALUES (?,?,?,?,?,?,?,?)`,
-    [sessionId, Date.now(), n(r.irRaw), n(r.redRaw), n(r.hrBpm),
-     r.hrDetectable ? 1 : 0, n(r.fatigueIndex), r.fatigueStatus ?? null]
+    `INSERT INTO ppg_readings (session_id, t, ir_raw, red_raw, hr_bpm, hr_detectable)
+     VALUES (?,?,?,?,?,?)`,
+    [sessionId, Date.now(), n(r.irRaw), n(r.redRaw), n(r.hrBpm), r.hrDetectable ? 1 : 0]
   )
 }
 
@@ -45,17 +44,36 @@ export async function insertTofReading(sessionId, r) {
   )
 }
 
-/** One finished fatigue check (HRV now vs baseline). */
+/**
+ * One finished HRV check (decision.decideCheck output, flattened). INVALID checks are stored too
+ * (status 'INVALID', metrics NULL) so History can show them separately from the trend line.
+ */
 export async function insertCheck(sessionId, c) {
   await execute(
     `INSERT INTO checks
-     (session_id, t, hr_bpm, sdnn, rmssd, pnn50, base_hr_bpm, base_sdnn, base_rmssd, base_pnn50,
-      fatigue_index, fatigued, n_ibis, duration_s)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [sessionId, Date.now(), n(c.hrBpm), n(c.sdnn), n(c.rmssd), n(c.pnn50),
-     n(c.baseHrBpm), n(c.baseSdnn), n(c.baseRmssd), n(c.basePnn50),
-     n(c.fatigueIndex), c.fatigued ? 1 : 0, n(c.nIbis), n(c.durationS)]
+     (session_id, t, hr_bpm, sdnn, rmssd, base_hr_bpm, base_sdnn, base_rmssd, duration_s,
+      status, work_duration_s, rmssd_change_pct, sdnn_change_pct, valid_windows, total_windows, drop_thr)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [sessionId, c.t ?? Date.now(), n(c.hrBpm), n(c.sdnn), n(c.rmssd),
+     n(c.baseHrBpm), n(c.baseSdnn), n(c.baseRmssd), n(c.durationS),
+     c.status, n(c.workDurationS), n(c.rmssdChangePct), n(c.sdnnChangePct),
+     n(c.validWindows), n(c.totalWindows), n(c.dropThr)]
   )
+}
+
+/** Stores a baseline once (created_at is UNIQUE, so a re-load of the same baseline is ignored). */
+export async function insertBaselineIfNew(b) {
+  await execute(
+    `INSERT OR IGNORE INTO baselines
+     (created_at, date_key, fitness, hr_bpm, rmssd, sdnn, valid_windows, total_windows, window_s, pitch_deg)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [b.createdAt, b.dateKey, n(b.fitness), n(b.hrv.hrBpm), n(b.hrv.rmssd), n(b.hrv.sdnn),
+     n(b.hrv.validWindows), n(b.hrv.totalWindows), n(b.hrv.windowS), n(b.posture?.pitchDeg)]
+  )
+}
+
+export async function queryBaselines() {
+  return select('SELECT * FROM baselines ORDER BY created_at')
 }
 
 export async function queryHistory(sessionId) {
@@ -76,5 +94,5 @@ export async function deleteSession(sessionId) {
 }
 
 if (typeof window !== 'undefined') {
-  window._sessions = { startSession, endSession, insertImuReading, insertPpgReading, insertTofReading, insertCheck, queryHistory }
+  window._sessions = { startSession, endSession, insertImuReading, insertPpgReading, insertTofReading, insertCheck, insertBaselineIfNew, queryHistory }
 }

@@ -30,34 +30,34 @@ function FilterDropdown({ options, value, onChange }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-2 h-10 px-4 rounded-full bg-white border border-[#c9d9f2] text-sm font-semibold hover:border-[var(--vg-tab-active)] cursor-pointer"
+        className="inline-flex items-center gap-2 h-control px-4 rounded-full bg-white border border-line-strong text-sm font-semibold hover:border-brand cursor-pointer"
       >
-        <FilterIcon size={16} className="text-slate-500" />
+        <FilterIcon size={16} className="text-ink-muted" />
         Filter Data
         {value !== 'all' && (
-          <span className="px-2 py-0.5 rounded-full bg-[var(--vg-blue-soft)] text-[var(--vg-tab-active)] text-xs">
+          <span className="px-2 py-0.5 rounded-full bg-brand-soft text-brand text-xs">
             {current.label}
           </span>
         )}
-        <ChevronDown size={16} className="text-slate-500" />
+        <ChevronDown size={16} className="text-ink-muted" />
       </button>
 
       {open && (
         <ul
           role="listbox"
-          className="absolute left-0 top-12 z-20 min-w-[220px] rounded-2xl bg-white border border-[#dbe6f7] shadow-xl p-2"
+          className="absolute left-0 top-dropdown z-dropdown min-w-menu rounded-2xl bg-white border border-line shadow-xl p-2"
         >
-          <li className="px-3 pt-1 pb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+          <li className="px-3 pt-1 pb-2 text-caption font-bold uppercase tracking-wide text-ink-faint">
             Sumber sesi
           </li>
           {options.map((o) => (
             <li key={o.value} role="option" aria-selected={o.value === value}>
               <button
                 onClick={() => { onChange(o.value); setOpen(false) }}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100 cursor-pointer"
+                className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-wash cursor-pointer"
               >
                 <span>{o.label}</span>
-                {o.value === value && <CheckIcon size={16} className="text-[var(--vg-tab-active)]" />}
+                {o.value === value && <CheckIcon size={16} className="text-brand" />}
               </button>
             </li>
           ))}
@@ -83,8 +83,8 @@ export function HistoryFilters({
       {/* Title row */}
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="m-0 text-2xl md:text-[28px] font-extrabold tracking-tight">Data Riwayat</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="m-0 text-2xl md:text-page-title font-extrabold tracking-tight">Data Riwayat</h1>
+          <p className="mt-1 text-sm text-ink-muted">
             Tren sensor VisioGuard dari sesi yang sudah direkam.
           </p>
         </div>
@@ -92,7 +92,7 @@ export function HistoryFilters({
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-white border border-[#c9d9f2] text-sm font-semibold text-[var(--vg-tab-active)] hover:bg-[var(--vg-blue-soft)] disabled:opacity-60 cursor-pointer"
+          className="inline-flex items-center gap-2 h-control-md px-3.5 rounded-full bg-white border border-line-strong text-sm font-semibold text-brand hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
         >
           <RefreshIcon size={16} className={loading ? 'animate-spin' : ''} />
           {loading ? 'Memuat…' : 'Segarkan'}
@@ -105,7 +105,7 @@ export function HistoryFilters({
         <div
           role="tablist"
           aria-label="Rentang waktu"
-          className="inline-flex max-w-full overflow-x-auto p-1 rounded-full bg-white border border-[#c9d9f2]"
+          className="inline-flex max-w-full overflow-x-auto p-1 rounded-full bg-white border border-line-strong"
         >
           {TIMEFRAMES.map((t) => {
             const on = timeframe === t.id
@@ -115,10 +115,10 @@ export function HistoryFilters({
                 role="tab"
                 aria-selected={on}
                 onClick={() => onTimeframe(t.id)}
-                className={`h-8 px-3 sm:px-3.5 shrink-0 rounded-full text-sm font-bold cursor-pointer transition-colors ${
+                className={`h-control-sm px-3 sm:px-3.5 shrink-0 rounded-full text-sm font-bold cursor-pointer transition-colors ${
                   on
-                    ? 'bg-[var(--vg-tab-active)] text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-brand text-white'
+                    : 'text-ink-soft hover:bg-wash'
                 }`}
               >
                 {t.label}
@@ -130,11 +130,11 @@ export function HistoryFilters({
         <FilterDropdown options={modeOptions} value={mode} onChange={onMode} />
 
         {/* Dynamic date range */}
-        <div className="inline-flex items-center gap-1 h-10 pl-1 pr-1 rounded-full bg-white border border-[#c9d9f2]">
+        <div className="inline-flex items-center gap-1 h-control pl-1 pr-1 rounded-full bg-white border border-line-strong">
           <button
             onClick={() => onShift(-1)}
             aria-label="Periode sebelumnya"
-            className="grid place-items-center w-8 h-8 rounded-full hover:bg-slate-100 cursor-pointer"
+            className="grid place-items-center size-touch-sm rounded-full hover:bg-wash cursor-pointer"
           >
             <ChevronLeft size={18} />
           </button>
@@ -145,7 +145,7 @@ export function HistoryFilters({
             onClick={() => onShift(1)}
             disabled={!canNext}
             aria-label="Periode berikutnya"
-            className="grid place-items-center w-8 h-8 rounded-full hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+            className="grid place-items-center size-touch-sm rounded-full hover:bg-wash disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
           >
             <ChevronRight size={18} />
           </button>
@@ -153,7 +153,7 @@ export function HistoryFilters({
 
         <button
           onClick={onToday}
-          className="h-10 px-3 text-sm font-semibold text-[var(--vg-tab-active)] hover:underline cursor-pointer"
+          className="h-control px-3 text-sm font-semibold text-brand hover:underline cursor-pointer"
         >
           Sekarang
         </button>
@@ -169,7 +169,7 @@ export function HistoryFilters({
                 if (ms != null) onCustom({ ...custom, from: ms })
               }}
               aria-label="Tanggal mulai"
-              className="h-10 px-3 rounded-full bg-white border border-[#c9d9f2]"
+              className="h-control px-3 rounded-full bg-white border border-line-strong"
             />
             <span>–</span>
             <input
@@ -181,12 +181,12 @@ export function HistoryFilters({
                 if (ms != null) onCustom({ ...custom, to: ms })
               }}
               aria-label="Tanggal akhir"
-              className="h-10 px-3 rounded-full bg-white border border-[#c9d9f2]"
+              className="h-control px-3 rounded-full bg-white border border-line-strong"
             />
           </div>
         )}
 
-        {/* Metric toggles */}
+        {/* Metric toggles: each active metric gets its own graph (grouped by unit) */}
         <div className="flex flex-wrap gap-2 2xl:ml-auto" role="group" aria-label="Metrik pada grafik">
           {METRICS.map((m) => {
             const on = activeIds.includes(m.id)
@@ -195,13 +195,13 @@ export function HistoryFilters({
                 key={m.id}
                 aria-pressed={on}
                 onClick={() => onToggleMetric(m.id)}
-                className={`inline-flex items-center gap-2 h-10 px-4 rounded-full border-2 text-sm font-bold cursor-pointer transition-colors ${
-                  on ? 'bg-white text-slate-900' : 'bg-white/60 border-transparent text-slate-500 hover:bg-white'
+                className={`inline-flex items-center gap-2 h-control px-4 rounded-full border-2 text-sm font-bold cursor-pointer transition-colors ${
+                  on ? 'bg-white text-ink' : 'bg-white/60 border-transparent text-ink-muted hover:bg-white'
                 }`}
                 style={on ? { borderColor: m.color } : undefined}
               >
                 <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
+                  className="inline-block size-dot rounded-full"
                   style={{ background: m.color, opacity: on ? 1 : 0.4 }}
                 />
                 {m.label}

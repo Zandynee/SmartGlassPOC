@@ -10,10 +10,17 @@
 //    ... sensor columns ...
 //    epoch_ms    1792136478500     (raw value, for scripts)
 //
+//  Two exports:
+//    sessionToCsv(session, history)   raw sensor ticks of one session (IMU + heart rate + ToF)
+//    checksToCsv(checks, baselines)   the HRV checks of a date range (one row per check)
+//
 //  Locale: Excel with an Indonesian regional setting expects ';' as the
 //  column separator and ',' as the decimal mark. Set FORMAT to
 //  { sep: ',', dec: '.' } if you open the files in Google Sheets / pandas / US Excel.
 // ─────────────────────────────────────────────
+
+import { STATUS_LABEL } from '../services/measureMessages.js'
+import { dayKey } from './dailySummary.js'
 
 const FORMAT = { sep: ';', dec: ',' }
 
@@ -74,8 +81,6 @@ const COLUMNS = [
   ['postur',           (row) => row.imu?.fhp_status],
   ['hr_bpm',           (row) => num(row.ppg?.hr_bpm, 1)],
   ['hr_terdeteksi',    (row) => (row.ppg ? (row.ppg.hr_detectable ? 'ya' : 'tidak') : '')],
-  ['indeks_kelelahan', (row) => num(row.ppg?.fatigue_index, 0)],
-  ['status_kelelahan', (row) => row.ppg?.fatigue_status],
   ['ir_raw',           (row) => row.ppg?.ir_raw],
   ['red_raw',          (row) => row.ppg?.red_raw],
   ['jarak_cm',         (row) => num(row.tof?.distance_cm, 1)],
@@ -126,4 +131,40 @@ export async function saveCsv(filename, text) {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return filename
+}
+
+// ── HRV checks ──────────────────────────────
+const CHECK_COLUMNS = [
+  ['tanggal',               (c) => fmtDate(c.t)],
+  ['waktu',                 (c) => fmtTime(c.t).slice(0, 8)],
+  ['lama_kerja_menit',      (c) => num(c.work_duration_s == null ? null : c.work_duration_s / 60, 1)],
+  ['perubahan_rmssd_persen', (c) => num(c.status === 'INVALID' ? null : c.rmssd_change_pct, 1)],
+  ['perubahan_sdnn_persen', (c) => num(c.status === 'INVALID' ? null : c.sdnn_change_pct, 1)],
+  ['status',                (c) => STATUS_LABEL[c.status] ?? ''],
+  ['status_kode',           (c) => c.status ?? ''],
+  ['window_valid',          (c) => c.valid_windows],
+  ['window_total',          (c) => c.total_windows],
+  ['rmssd_ms',              (c) => num(c.rmssd, 1)],
+  ['sdnn_ms',               (c) => num(c.sdnn, 1)],
+  ['rmssd_baseline_ms',     (c) => num(c.base_rmssd, 1)],
+  ['sdnn_baseline_ms',      (c) => num(c.base_sdnn, 1)],
+  ['hr_bpm',                (c) => num(c.hr_bpm, 0)],
+  ['ambang_turun',          (c) => num(c.drop_thr, 2)],
+  ['kebugaran_1_5',         (c, fit) => fit[dayKey(c.t)] ?? ''],
+  ['epoch_ms',              (c) => c.t],
+]
+
+export function checksToCsv(checks, baselines = []) {
+  const fitness = {}
+  for (const b of [...baselines].sort((a, c) => a.created_at - c.created_at)) {
+    if (b.fitness != null) fitness[b.date_key] = b.fitness
+  }
+  const lines = [CHECK_COLUMNS.map(([h]) => h).join(FORMAT.sep)]
+  for (const c of checks) lines.push(CHECK_COLUMNS.map(([, get]) => cell(get(c, fitness))).join(FORMAT.sep))
+  return BOM + lines.join('\r\n') + '\r\n'
+}
+
+// visioguard_cek_2026-11-02_2026-11-08.csv
+export function checksCsvFilename(range) {
+  return `visioguard_cek_${fmtDate(range.start)}_${fmtDate(range.end - 1)}.csv`
 }

@@ -5,7 +5,8 @@
 //  Data model (same tables SessionHistory already read):
 //    session   { id, mode, started_at, ended_at }
 //    history   { imu: [{t, roll, pitch, yaw, fhp_status}],
-//                ppg: [{t, hr_bpm, fatigue_index, fatigue_status}],
+//                ppg: [{t, hr_bpm}],
+//                checks: [{t, status, rmssd_change_pct, …}],
 //                tof: [{t, distance_cm, status}] }
 // ─────────────────────────────────────────────
 
@@ -41,22 +42,24 @@ export const METRICS = [
     zones: [{ from: 60, to: 100, color: '#22c55e', label: 'Normal (60–100 bpm)' }],
   },
   {
-    id: 'fatigue',
-    label: 'Kelelahan',
-    unit: '/100',
+    // RMSSD of a check vs. that day's baseline, in %. INVALID checks carry no value, so they
+    // never enter the trend line (they are listed separately in the checks table).
+    id: 'rmssd',
+    label: 'Perubahan RMSSD',
+    unit: '%Δ',
     color: '#8b5cf6',
-    table: 'ppg',
+    table: 'checks',
     decimals: 0,
-    domain: [0, 100],
+    domain: [-60, 40],
     pick: (r) => {
-      const v = Number(r.fatigue_index)
-      if (!Number.isFinite(v) || r.fatigue_status === 'UNKNOWN') return null
-      return Math.min(100, Math.max(0, v))
+      if (!r.status || r.status === 'INVALID') return null          // NULL = legacy v1 row
+      const v = Number(r.rmssd_change_pct)
+      return r.rmssd_change_pct != null && Number.isFinite(v) ? v : null
     },
+    // dashed line at -20 % = default drop_thr (Params.drop_thr); the band below it = "turun ≥ 20%"
     zones: [
-      { from: 0,  to: 50,  color: '#22c55e', label: 'Segar (< 50)' },
-      { from: 50, to: 75,  color: '#f59e0b', label: 'Waspada (50–75)' },
-      { from: 75, to: 100, color: '#ef4444', label: 'Lelah (≥ 75)' },
+      { from: -100, to: -20, color: '#f59e0b', label: 'Turun ≥ 20% (saran istirahat)' },
+      { from: -20, to: 100, color: '#22c55e', label: 'Stabil (> −20%)' },
     ],
   },
   {
@@ -257,7 +260,7 @@ function bucketIndex(buckets, t) {
  * @param histories array of { imu, ppg, tof }
  * @param range     { start, end } – rows outside are ignored
  * @returns {
- *   points:  [{ t0, t1, values: {hr,fatigue,distance,posture}, counts }]
+ *   points:  [{ t0, t1, values: {hr,rmssd,distance,posture}, counts }]
  *   summary: { hr: {avg,count}, ... }     // over ALL readings in range
  * }
  */

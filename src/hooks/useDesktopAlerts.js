@@ -5,8 +5,8 @@
 //    • too close to the monitor                     (rising edge + cooldown)
 //    • bad posture for BAD_POSTURE_MS               (badPosture, from App: |Δpitch| > 15°)
 //    • early warning: |Δpitch| 10–15° for 2 s       (imuDeviation)
-//    • "Cek kelelahan?" prompt opened               (promptOpen, rising edge)
-//    • fatigue detected after a check               (fatigued === true)
+//    • "Mau cek kondisi?" prompt opened               (promptOpen, rising edge)
+//    • HRV dropped after a check                    (checkStatus === 'DROP')
 //  REMOVED: the 20-minute break reminder (Timer_D prompt replaces it) and the PPG alert.
 // ─────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ export function useDesktopAlerts({
   badPosture = false,
   imuDeviation = null,
   promptOpen = false,
-  fatigued = null,
+  checkStatus = null,
 }) {
   const lastClose = useRef(0)
   const lastPosture = useRef(0)
@@ -84,14 +84,14 @@ export function useDesktopAlerts({
   // ── Timer_D prompt (user may be in another window) ──
   useEffect(() => {
     if (promptOpen) {
-      notify('VisioGuard: cek kelelahan', 'Anda sudah bekerja cukup lama. Buka aplikasi untuk mengukur kelelahan (±2 menit).')
+      notify('VisioGuard: cek kondisi', 'Sudah cukup lama bekerja. Buka aplikasi untuk cek kondisi (±3 menit).')
     }
   }, [promptOpen])
 
-  // ── result of a fatigue check ──
+  // ── result of an HRV check ──
   useEffect(() => {
-    if (fatigued === true) {
-      notify('VisioGuard: terdeteksi kelelahan', 'HRV Anda turun jelas dari kondisi awal. Pertimbangkan untuk istirahat.')
+    if (checkStatus === 'DROP') {
+      notify('VisioGuard: HRV turun', 'HRV turun dibanding baseline, pertimbangkan istirahat.')
     }
-  }, [fatigued])
+  }, [checkStatus])
 }

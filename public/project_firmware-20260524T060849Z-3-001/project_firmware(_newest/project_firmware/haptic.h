@@ -48,3 +48,4 @@ void       hapticInit();
 void       hapticUpdate(float distanceCm);
 HapticZone hapticEvaluateZone(float distanceCm);
 const char* hapticZoneToString(HapticZone zone);
+void       hapticStop();   // motor off + reset pulse state (call on every state change)

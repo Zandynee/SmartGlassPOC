@@ -21,7 +21,7 @@ function BatteryRing({ percent }) {
   return (
     <svg
       viewBox="0 0 100 100"
-      className="w-[88px] h-[88px]"
+      className="size-battery-ring"
       role="img"
       aria-label={known ? `Baterai ${Math.round(pct)} persen` : 'Baterai tidak diketahui'}
     >
@@ -61,17 +61,17 @@ export function StatusCard({ connected, simulating, battery }) {
         <div className="min-w-0">
           <p
             className={`m-0 text-3xl font-extrabold tracking-tight ${
-              connected ? 'text-green-600' : simulating ? 'text-amber-600' : 'text-slate-500'
+              connected ? 'text-ok' : simulating ? 'text-warning' : 'text-ink-muted'
             }`}
           >
             {label}
           </p>
-          <p className="mt-1 text-sm text-slate-500">VisioGuard</p>
+          <p className="mt-1 text-sm text-ink-muted">VisioGuard</p>
         </div>
 
         <div className="flex flex-col items-center gap-1 shrink-0">
           <BatteryRing percent={live ? battery : null} />
-          <span className="text-xs font-semibold text-slate-500">Baterai</span>
+          <span className="text-xs font-semibold text-ink-muted">Baterai</span>
         </div>
       </div>
     </Card>

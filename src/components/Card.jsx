@@ -13,13 +13,13 @@
 export function Card({ title, dot, right, className = '', children }) {
   return (
     <section
-      className={`rounded-2xl bg-white border border-[#dbe6f7] shadow-sm p-4 md:p-5 ${className}`}
+      className={`rounded-2xl bg-white border border-line shadow-sm p-4 md:p-5 ${className}`}
     >
       {(title || right) && (
         <div className="flex items-center justify-between gap-2 mb-3">
-          <h2 className="m-0 flex items-center gap-2 text-sm font-bold text-slate-600">
+          <h2 className="m-0 flex items-center gap-2 text-sm font-bold text-ink-soft">
             {dot && (
-              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: dot }} />
+              <span className="inline-block size-dot rounded-full" style={{ background: dot }} />
             )}
             {title}
           </h2>

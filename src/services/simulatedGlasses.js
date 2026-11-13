@@ -11,7 +11,7 @@
 //
 //  Test knobs (all optional):
 //    sim.fingerOn      boolean   finger on the PPG sensor (default true)
-//    sim.fatigued      boolean   lowers HRV in the signal   (default false)
+//    sim.hrvDrop        boolean   lowers HRV in the signal (simulates a check that ends in DROP)   (default false)
 //    sim.slouchDeg     number    added to the upright pitch  (default 0)
 //    sim.distanceCm    number    ToF distance                (default 55)
 //    sim.dropLink(ms)            link lost; reconnecting fails for `ms`
@@ -29,7 +29,7 @@ export class SimulatedGlasses {
     this.connectDelayMs = connectDelayMs
 
     this.fingerOn = true
-    this.fatigued = false
+    this.hrvDrop = false
     this.slouchDeg = 0
     this.distanceCm = 55
     this.uprightPitch = 4
@@ -66,9 +66,21 @@ export class SimulatedGlasses {
 
   async writeCommand(value) {
     if (!this.conn) throw new Error('not connected')
-    if (value !== 1 && value !== 2) throw new Error('invalid command ' + value)
-    const target = value === 1 ? GLASSES_STATE.WORK_MODE : GLASSES_STATE.CHECK_MODE
-    setTimeout(() => this.setFirmwareState(target), 120)
+    const target = { 1: GLASSES_STATE.WORK_MODE, 2: GLASSES_STATE.CHECK_MODE, 3: GLASSES_STATE.IDLE }[value]
+    if (!target) throw new Error('invalid command ' + value)
+    const F = GLASSES_STATE
+    const ok = {
+      [F.BASELINE_CREATION]: [F.WORK_MODE],
+      [F.WORK_MODE]: [F.CHECK_MODE, F.IDLE],
+      [F.CHECK_MODE]: [F.WORK_MODE, F.IDLE],
+      [F.IDLE]: [F.WORK_MODE],
+    }
+    setTimeout(() => {
+      // like the firmware: illegal/no-op requests just re-announce the current state
+      if (target !== this.fw && !ok[this.fw]?.includes(target)) { if (this.conn) this._emit('ble-state', this.fw); return }
+      if (target === this.fw) { if (this.conn) this._emit('ble-state', this.fw); return }
+      this.setFirmwareState(target)
+    }, 120)
   }
 
   async readState() {
@@ -106,8 +118,8 @@ export class SimulatedGlasses {
 
   _nextIbi() {
     const i = this._beatIdx++
-    const rsa = this.fatigued ? 14 : 55           // respiratory sinus arrhythmia (ms)
-    const noise = this.fatigued ? 5 : 22
+    const rsa = this.hrvDrop ? 14 : 55           // respiratory sinus arrhythmia (ms)
+    const noise = this.hrvDrop ? 5 : 22
     return 850 + rsa * Math.sin(i * 0.75) + noise * this._gauss()
   }
 
@@ -133,7 +145,7 @@ export class SimulatedGlasses {
 
     // IMU 10 Hz (BASELINE + WORK)
     this._timers.push(setInterval(() => {
-      if (!this.conn || this.fw === GLASSES_STATE.CHECK_MODE) return
+      if (!this.conn || this.fw === GLASSES_STATE.CHECK_MODE || this.fw === GLASSES_STATE.IDLE) return
       const pitch = this.uprightPitch + this.slouchDeg + this._gauss() * 0.3
       const bad = this.slouchDeg > 10
       this._emit('ble-imu', JSON.stringify({ pitch_deg: +pitch.toFixed(2), fhp_status: bad ? 'POOR_POSTURE' : 'NORMAL' }))
@@ -148,7 +160,7 @@ export class SimulatedGlasses {
 
     // PPG 100 Hz in 50 ms bursts (BASELINE + CHECK)
     this._timers.push(setInterval(() => {
-      if (!this.conn || this.fw === GLASSES_STATE.WORK_MODE) { this._t0 = 0; return }
+      if (!this.conn || this.fw === GLASSES_STATE.WORK_MODE || this.fw === GLASSES_STATE.IDLE) { this._t0 = 0; return }
       if (!this._t0) { this._t0 = Date.now(); this._emitted = 0 }
       const due = Math.floor(((Date.now() - this._t0) * FS) / 1000) - this._emitted
       for (let k = 0; k < due; k++) {

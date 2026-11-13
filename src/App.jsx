@@ -12,15 +12,17 @@ import { useGlassesSession } from './hooks/useGlassesSession'
 import { useNotifications } from './hooks/useNotifications'
 import { useSafeDistanceTimer } from './hooks/useSafeDistanceTimer'
 import { useDesktopAlerts } from './hooks/useDesktopAlerts'
+import { useSessionRecorder } from './hooks/useSessionRecorder'
+import { isBaselineStale } from './services/baselineStore'
 import { LINK } from './services/bleService'
 import { GLASSES_STATE } from './services/bleConfig'
 import { WORK } from './services/glassesMachine'
-import { initDb } from './services/db/db'
+import { initDb, dbHealth } from './services/db/db'
 import { StatusCard } from './components/StatusCard'
 import { TofReadings } from './components/TofReadings'
 import { PostureCard, POSTURE_LIMIT_DEG } from './components/PostureCard'
 import { GlassesControls } from './components/GlassesControls'
-import { OfflineBanner, FatiguePrompt, SessionEndedBanner } from './components/SessionOverlays'
+import { OfflineBanner, CheckPrompt, BaselineBanner, SessionEndedBanner } from './components/SessionOverlays'
 import { BaselineWizard } from './components/BaselineWizard'
 import { CheckModeScreen } from './components/CheckModeScreen'
 import { NotificationPanel } from './components/NotificationPanel'
@@ -31,10 +33,11 @@ const wrap180 = (a) => ((((a + 180) % 360) + 360) % 360) - 180
 
 // TODO(firmware): confirm real ToF status strings. Only fault-like text is shown as a sensor error.
 const TOF_FAULT = /ERR|FAIL|FAULT|TIMEOUT|OUT_OF_RANGE|INVALID/i
+const SAFE_DISTANCE_CM = 40
 
 function Frame({ tab, onNavigate, notifications, status, banner, sidebar = true, children }) {
   return (
-    <div className="min-h-svh flex flex-col bg-[#eef4ff] text-left">
+    <div className="min-h-svh flex flex-col bg-page text-left">
       <HistoryTopBar tab={tab} onNavigate={onNavigate} notifications={notifications} status={status} />
       {banner}
       <div className="flex flex-1 min-w-0">
@@ -53,20 +56,17 @@ function App() {
   const [simulate, setSimulate] = useState(false)
   const [asking, setAsking] = useState(false)
 
+  const [dbError, setDbError] = useState(null)
+
   useEffect(() => {
     initDb()
-      .then(() => setDbReady(true))
-      .catch((err) => { console.error('initDb failed:', err); alert('initDb failed: ' + (err?.message || err)) })
+      .then(() => dbHealth())
+      .then((h) => { if (!h.ok) console.warn('DB health:', h); setDbReady(true) })
+      .catch((err) => { console.error('initDb failed:', err); setDbError(err?.message || String(err)) })
   }, [])
 
   const g = useGlassesSession({ simulate })
   const { s } = g
-  useEffect(() => {
-  let n = 0, last = []
-  const off = g.session.ble.on('ppg', (p) => { n++; last = [...last.slice(-4), p.ir] })
-  const t = setInterval(() => { console.log('ppg packets/s:', n, 'last ir:', last); n = 0 }, 1000)
-  return () => { off(); clearInterval(t) }
-}, [g.session])
 
   // ── derived state ──
   const online = s.link === LINK.ONLINE
@@ -84,13 +84,29 @@ function App() {
   const badPosture = live && pitchDev != null && Math.abs(pitchDev) > POSTURE_LIMIT_DEG
 
   const outcome = s.check.outcome
-  const fatigued = outcome?.ok ? outcome.fatigued : null
+  const checkStatus = outcome?.status ?? null
+  const baselineStale = isBaselineStale(s.baseline)
 
   const notifications = useNotifications({
     live: online,
     fhpStatus: badPosture ? 'POOR_POSTURE' : 'NORMAL',
-    fatigueStatus: fatigued ? 'FATIGUED' : 'FRESH',
+    checkStatus,
     ppgAlert: null,
+  })
+
+  // database persistence (sessions, IMU/ToF readings, checks, daily baselines)
+  useSessionRecorder({
+    enabled: g.enabled,
+    link: s.link,
+    fw: s.fw,
+    simulate,
+    imu: g.imu,
+    tof: g.tof,
+    fhpStatus: badPosture ? 'POOR_POSTURE' : 'NORMAL',
+    outcome,
+    baseline: s.baseline,
+    workDurationS: s.work.timerS,
+    sessionEnded: s.sessionEnded,
   })
 
   useDesktopAlerts({
@@ -99,9 +115,18 @@ function App() {
     badPosture,
     imuDeviation: pitchDev == null ? null : Math.abs(pitchDev),
     promptOpen: s.work.prompt,
-    fatigued,
+    checkStatus,
   })
 
+  if (dbError) {
+    return (
+      <div className="p-6 max-w-xl">
+        <h1 className="text-2xl m-0 mb-2">Database tidak bisa dibuka</h1>
+        <p className="text-sm text-danger font-mono">{dbError}</p>
+        <p className="text-sm text-ink-muted">Riwayat tidak bisa disimpan atau dibaca. Periksa izin plugin SQL pada aplikasi, lalu mulai ulang.</p>
+      </div>
+    )
+  }
   if (!dbReady) return <p className="p-6">Memuat…</p>
 
   const status = online
@@ -135,6 +160,12 @@ function App() {
   }
 
   // ── STATE B: dashboard ──
+  // "Cek kondisi sekarang": any time, no Timer_D wait. Needs a baseline, a live link and a running session.
+  const canCheck = !!s.baseline && online && !s.sessionEnded && s.fw === 'WORK_MODE'
+  const checkHint = s.sessionEnded ? 'Sesi dihentikan.'
+    : !online ? 'Hubungkan kacamata untuk mengukur.'
+    : baselineStale ? `Akan dibandingkan dengan baseline tanggal ${s.baseline.dateKey}.`
+    : null
   const answerYes = async () => {
     setAsking(true)
     try { await g.session.answerPrompt(true) } finally { setAsking(false) }
@@ -145,12 +176,15 @@ function App() {
       <section className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="m-0 text-2xl md:text-[28px] font-extrabold tracking-tight">Beranda</h1>
-          <p className="mt-1 text-sm text-slate-500">Pantauan langsung sensor VisioGuard.</p>
+          <p className="mt-1 text-sm text-ink-muted">Pantauan langsung sensor VisioGuard.</p>
         </div>
         {controls}
       </section>
 
       {s.sessionEnded && <SessionEndedBanner onStart={() => g.session.startSession()} />}
+      {!s.sessionEnded && baselineStale && (
+        <BaselineBanner hasOld={!!s.baseline} disabled={g.offline} onStart={() => g.session.startRebase()} />
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-5">
         <div className="flex flex-col gap-5">
@@ -158,7 +192,7 @@ function App() {
           <TofReadings
             tof={tofView}
             live={showWork}
-            safe={showWork ? distanceCm >= 40 : null}
+            safe={showWork ? distanceCm >= SAFE_DISTANCE_CM : null}
             safeSeconds={safeSeconds}
           />
         </div>
@@ -170,13 +204,18 @@ function App() {
           timerS={s.work.timerS}
           promptAfterS={g.session.cfg.promptAfterS ?? WORK.PROMPT_AFTER_S}
           ended={s.sessionEnded}
+          onCheck={() => g.session.startCheck()}
+          checkDisabled={!canCheck}
+          checkHint={checkHint}
+          onBaseline={s.sessionEnded ? null : () => g.session.startRebase()}
         />
       </div>
 
-      <FatiguePrompt
+      <CheckPrompt
         open={s.work.prompt}
         pending={asking}
         error={g.error}
+        offline={g.offline}
         timerS={s.work.timerS}
         onYes={answerYes}
         onNo={() => g.session.answerPrompt(false)}

@@ -19,6 +19,17 @@ void hapticInit() {
 }
 
 // ─────────────────────────────────────────
+//  hapticStop()
+//  Matikan motor dan reset state pulse. Dipanggil saat state
+//  berubah supaya pulse tidak "bocor" ke state berikutnya.
+// ─────────────────────────────────────────
+void hapticStop() {
+  digitalWrite(HAPTIC_PIN, LOW);
+  _pulseState      = false;
+  _lastPulseToggle = millis();
+}
+
+// ─────────────────────────────────────────
 //  hapticEvaluateZone()
 //  Tentukan zona berdasarkan jarak (cm).
 // ─────────────────────────────────────────
