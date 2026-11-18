@@ -10,10 +10,11 @@
 import { useReducer } from 'react'
 import { GLASSES_STATE } from '../services/bleConfig'
 import { LINK } from '../services/bleService'
+import { CloseIcon } from './icons'
 
 const btn =
-  'inline-flex items-center gap-2 h-control px-4 rounded-full bg-white border border-line-strong text-sm font-semibold ' +
-  'cursor-pointer transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-40'
+  'inline-flex items-center gap-2 h-control px-4 rounded-lg bg-white border border-line-strong text-sm font-semibold ' +
+  'cursor-pointer transition-colors hover:bg-mist disabled:cursor-not-allowed disabled:opacity-40'
 
 function Spinner() {
   return <span className="inline-block size-spinner rounded-full border-2 border-brand border-t-transparent animate-spin" aria-hidden="true" />
@@ -25,8 +26,8 @@ function SimKnobs({ sim }) {
   const row = 'flex items-center gap-2 text-xs font-semibold text-ink-soft'
 
   return (
-    <details open className="w-full max-w-xl rounded-xl border border-line bg-white px-3 py-2 text-left">
-      <summary className="cursor-pointer text-xs font-bold text-ink-muted">Panel simulasi (uji tanpa perangkat)</summary>
+    <details open className="w-full max-w-xl rounded-xl border border-line bg-white px-4 py-3 text-left">
+      <summary className="cursor-pointer text-xs font-medium text-ink-muted">Panel simulasi (uji tanpa perangkat)</summary>
       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
         <label className={row}>
           <input type="checkbox" checked={sim.fingerOn} onChange={(e) => set('fingerOn', e.target.checked)} /> Jari di sensor
@@ -46,7 +47,7 @@ function SimKnobs({ sim }) {
       <div className="mt-2 flex flex-wrap gap-2">
         <button className={`${btn} h-control-sm text-xs`} onClick={() => sim.dropLink(5000)}>Putuskan 5 dtk</button>
         <button className={`${btn} h-control-sm text-xs`} onClick={() => sim.setFirmwareState(GLASSES_STATE.BASELINE_CREATION)}>
-          Reboot kacamata (→ BASELINE)
+          Reboot kacamata (menuju BASELINE)
         </button>
       </div>
     </details>
@@ -61,19 +62,19 @@ export function GlassesControls({ g, simulate, onSimulate }) {
   return (
     <div className="flex flex-col items-end gap-2">
       {g.error && (
-        <p className="max-w-xl text-xs font-mono text-danger border border-danger-line-strong bg-danger-surface rounded-xl px-3 py-1.5">✕ {g.error}</p>
+        <p className="flex items-center gap-2 max-w-xl text-xs font-mono text-danger border border-danger-line-strong bg-danger-surface rounded-lg px-3 py-2"><CloseIcon size={14} className="shrink-0" /> {g.error}</p>
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <div role="group" aria-label="Sumber data" className="inline-flex p-1 rounded-full bg-white border border-line-strong">
+        <div role="group" aria-label="Sumber data" className="inline-flex p-1 rounded-xl bg-wash border border-line">
           {[[false, 'Perangkat'], [true, 'Simulasi']].map(([v, label]) => (
             <button
               key={label}
               disabled={g.enabled}
               onClick={() => onSimulate(v)}
               title={g.enabled ? 'Putuskan dulu untuk mengganti sumber' : undefined}
-              className={`h-control-sm px-3 rounded-full text-sm font-bold disabled:cursor-not-allowed ${
-                simulate === v ? 'bg-brand text-white' : 'text-ink-soft hover:bg-wash disabled:hover:bg-transparent'
+              className={`h-control-sm px-3 rounded-lg text-sm font-medium disabled:cursor-not-allowed ${
+                simulate === v ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
               }`}
             >
               {label}
@@ -82,7 +83,7 @@ export function GlassesControls({ g, simulate, onSimulate }) {
         </div>
 
         <button
-          className={`${btn} ${online ? 'text-ok-strong' : 'text-brand'}`}
+          className={`${btn} text-ink-strong`}
           onClick={g.enabled ? g.disconnect : g.connect}
           aria-busy={searching}
         >

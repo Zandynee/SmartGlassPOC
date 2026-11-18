@@ -31,7 +31,7 @@ export const METRICS = [
     id: 'hr',
     label: 'Detak Jantung',
     unit: 'bpm',
-    color: '#e5484d',
+    color: '#2563eb',
     table: 'ppg',
     decimals: 0,
     domain: [40, 140],
@@ -39,7 +39,7 @@ export const METRICS = [
       const v = Number(r.hr_bpm)
       return Number.isFinite(v) && v > 0 ? v : null     // 0 = "undetectable"
     },
-    zones: [{ from: 60, to: 100, color: '#22c55e', label: 'Normal (60–100 bpm)' }],
+    zones: [{ from: 60, to: 100, color: '#2f9e6e', label: 'Normal (60–100 bpm)' }],
   },
   {
     // RMSSD of a check vs. that day's baseline, in %. INVALID checks carry no value, so they
@@ -47,7 +47,7 @@ export const METRICS = [
     id: 'rmssd',
     label: 'Perubahan RMSSD',
     unit: '%Δ',
-    color: '#8b5cf6',
+    color: '#2563eb',
     table: 'checks',
     decimals: 0,
     domain: [-60, 40],
@@ -58,15 +58,15 @@ export const METRICS = [
     },
     // dashed line at -20 % = default drop_thr (Params.drop_thr); the band below it = "turun ≥ 20%"
     zones: [
-      { from: -100, to: -20, color: '#f59e0b', label: 'Turun ≥ 20% (saran istirahat)' },
-      { from: -20, to: 100, color: '#22c55e', label: 'Stabil (> −20%)' },
+      { from: -100, to: -20, color: '#d98a1c', label: 'Turun ≥ 20% (saran istirahat)' },
+      { from: -20, to: 100, color: '#2f9e6e', label: 'Stabil (> −20%)' },
     ],
   },
   {
     id: 'distance',
     label: 'Jarak Layar',
     unit: 'cm',
-    color: '#3a8dff',
+    color: '#2563eb',
     table: 'tof',
     decimals: 1,
     domain: [0, 80],
@@ -78,15 +78,15 @@ export const METRICS = [
       return v
     },
     zones: [
-      { from: 0,  to: 40,  color: '#ef4444', label: 'Terlalu dekat (< 40 cm)' },
-      { from: 40, to: 80,  color: '#22c55e', label: 'Jarak aman (≥ 40 cm)' },
+      { from: 0,  to: 40,  color: '#d9453f', label: 'Terlalu dekat (< 40 cm)' },
+      { from: 40, to: 80,  color: '#2f9e6e', label: 'Jarak aman (≥ 40 cm)' },
     ],
   },
   {
     id: 'posture',
     label: 'Postur',
     unit: '%',
-    color: '#0d9488',
+    color: '#2563eb',
     table: 'imu',
     decimals: 0,
     domain: [0, 100],
@@ -96,9 +96,9 @@ export const METRICS = [
       return r.fhp_status === 'POOR_POSTURE' ? 0 : 100
     },
     zones: [
-      { from: 0,  to: 50,  color: '#ef4444', label: 'Buruk (< 50%)' },
-      { from: 50, to: 80,  color: '#f59e0b', label: 'Cukup (50–80%)' },
-      { from: 80, to: 100, color: '#22c55e', label: 'Baik (≥ 80%)' },
+      { from: 0,  to: 50,  color: '#d9453f', label: 'Buruk (< 50%)' },
+      { from: 50, to: 80,  color: '#d98a1c', label: 'Cukup (50–80%)' },
+      { from: 80, to: 100, color: '#2f9e6e', label: 'Baik (≥ 80%)' },
     ],
   },
 ]

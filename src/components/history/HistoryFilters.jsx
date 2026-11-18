@@ -30,14 +30,12 @@ function FilterDropdown({ options, value, onChange }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-2 h-control px-4 rounded-full bg-white border border-line-strong text-sm font-semibold hover:border-brand cursor-pointer"
+        className="inline-flex items-center gap-2 h-control px-4 rounded-lg bg-white border border-line-strong text-sm font-semibold hover:bg-mist cursor-pointer"
       >
         <FilterIcon size={16} className="text-ink-muted" />
-        Filter Data
+        Filter data
         {value !== 'all' && (
-          <span className="px-2 py-0.5 rounded-full bg-brand-soft text-brand text-xs">
-            {current.label}
-          </span>
+          <span className="font-mono text-xs text-ink-muted">{current.label}</span>
         )}
         <ChevronDown size={16} className="text-ink-muted" />
       </button>
@@ -45,9 +43,9 @@ function FilterDropdown({ options, value, onChange }) {
       {open && (
         <ul
           role="listbox"
-          className="absolute left-0 top-dropdown z-dropdown min-w-menu rounded-2xl bg-white border border-line shadow-xl p-2"
+          className="absolute left-0 top-dropdown z-dropdown min-w-menu rounded-2xl bg-white border border-line shadow-float p-2"
         >
-          <li className="px-3 pt-1 pb-2 text-caption font-bold uppercase tracking-wide text-ink-faint">
+          <li className="px-3 pt-1 pb-2 text-xs font-medium text-ink-muted">
             Sumber sesi
           </li>
           {options.map((o) => (
@@ -83,16 +81,16 @@ export function HistoryFilters({
       {/* Title row */}
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="m-0 text-2xl md:text-page-title font-extrabold tracking-tight">Data Riwayat</h1>
+          <h1 className="m-0 text-2xl md:text-page-title font-medium">Data Riwayat</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Tren sensor VisioGuard dari sesi yang sudah direkam.
+            Tren sensor VisioGuard dari sesi yang sudah direkam
           </p>
         </div>
 
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="inline-flex items-center gap-2 h-control-md px-3.5 rounded-full bg-white border border-line-strong text-sm font-semibold text-brand hover:bg-brand-soft disabled:opacity-60 cursor-pointer"
+          className="inline-flex items-center gap-2 h-control-md px-4 rounded-lg bg-white border border-line-strong text-sm font-semibold text-ink-medium hover:bg-wash disabled:opacity-60 cursor-pointer"
         >
           <RefreshIcon size={16} className={loading ? 'animate-spin' : ''} />
           {loading ? 'Memuat…' : 'Segarkan'}
@@ -105,7 +103,7 @@ export function HistoryFilters({
         <div
           role="tablist"
           aria-label="Rentang waktu"
-          className="inline-flex max-w-full overflow-x-auto p-1 rounded-full bg-white border border-line-strong"
+          className="inline-flex max-w-full overflow-x-auto p-1 rounded-xl bg-wash border border-line"
         >
           {TIMEFRAMES.map((t) => {
             const on = timeframe === t.id
@@ -115,10 +113,10 @@ export function HistoryFilters({
                 role="tab"
                 aria-selected={on}
                 onClick={() => onTimeframe(t.id)}
-                className={`h-control-sm px-3 sm:px-3.5 shrink-0 rounded-full text-sm font-bold cursor-pointer transition-colors ${
+                className={`h-control-sm px-3 sm:px-4 shrink-0 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
                   on
-                    ? 'bg-brand text-white'
-                    : 'text-ink-soft hover:bg-wash'
+                    ? 'bg-white text-ink shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
                 }`}
               >
                 {t.label}
@@ -130,22 +128,22 @@ export function HistoryFilters({
         <FilterDropdown options={modeOptions} value={mode} onChange={onMode} />
 
         {/* Dynamic date range */}
-        <div className="inline-flex items-center gap-1 h-control pl-1 pr-1 rounded-full bg-white border border-line-strong">
+        <div className="inline-flex items-center gap-1 h-control pl-1 pr-1 rounded-lg bg-white border border-line-strong">
           <button
             onClick={() => onShift(-1)}
             aria-label="Periode sebelumnya"
-            className="grid place-items-center size-touch-sm rounded-full hover:bg-wash cursor-pointer"
+            className="grid place-items-center size-touch-sm rounded-lg hover:bg-wash cursor-pointer"
           >
             <ChevronLeft size={18} />
           </button>
-          <span className="px-2 text-sm font-bold tabular-nums whitespace-nowrap">
+          <span className="px-2 text-sm font-medium tabular-nums whitespace-nowrap">
             {formatRangeLabel(timeframe, range)}
           </span>
           <button
             onClick={() => onShift(1)}
             disabled={!canNext}
             aria-label="Periode berikutnya"
-            className="grid place-items-center size-touch-sm rounded-full hover:bg-wash disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+            className="grid place-items-center size-touch-sm rounded-lg hover:bg-wash disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
           >
             <ChevronRight size={18} />
           </button>
@@ -169,7 +167,7 @@ export function HistoryFilters({
                 if (ms != null) onCustom({ ...custom, from: ms })
               }}
               aria-label="Tanggal mulai"
-              className="h-control px-3 rounded-full bg-white border border-line-strong"
+              className="h-control px-3 rounded-lg bg-white border border-line-strong"
             />
             <span>–</span>
             <input
@@ -181,7 +179,7 @@ export function HistoryFilters({
                 if (ms != null) onCustom({ ...custom, to: ms })
               }}
               aria-label="Tanggal akhir"
-              className="h-control px-3 rounded-full bg-white border border-line-strong"
+              className="h-control px-3 rounded-lg bg-white border border-line-strong"
             />
           </div>
         )}
@@ -195,15 +193,11 @@ export function HistoryFilters({
                 key={m.id}
                 aria-pressed={on}
                 onClick={() => onToggleMetric(m.id)}
-                className={`inline-flex items-center gap-2 h-control px-4 rounded-full border-2 text-sm font-bold cursor-pointer transition-colors ${
-                  on ? 'bg-white text-ink' : 'bg-white/60 border-transparent text-ink-muted hover:bg-white'
+                className={`inline-flex items-center gap-2 h-control px-4 rounded-lg border text-sm font-medium cursor-pointer transition-colors ${
+                  on ? 'bg-wash border-line-strong text-ink' : 'bg-white border-line text-ink-muted hover:bg-mist'
                 }`}
-                style={on ? { borderColor: m.color } : undefined}
               >
-                <span
-                  className="inline-block size-dot rounded-full"
-                  style={{ background: m.color, opacity: on ? 1 : 0.4 }}
-                />
+                {on && <CheckIcon size={16} />}
                 {m.label}
               </button>
             )

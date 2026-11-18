@@ -121,7 +121,7 @@ function App() {
   if (dbError) {
     return (
       <div className="p-6 max-w-xl">
-        <h1 className="text-2xl m-0 mb-2">Database tidak bisa dibuka</h1>
+        <h1 className="text-2xl font-semibold m-0 mb-2">Database tidak bisa dibuka</h1>
         <p className="text-sm text-danger font-mono">{dbError}</p>
         <p className="text-sm text-ink-muted">Riwayat tidak bisa disimpan atau dibaca. Periksa izin plugin SQL pada aplikasi, lalu mulai ulang.</p>
       </div>
@@ -162,9 +162,9 @@ function App() {
   // ── STATE B: dashboard ──
   // "Cek kondisi sekarang": any time, no Timer_D wait. Needs a baseline, a live link and a running session.
   const canCheck = !!s.baseline && online && !s.sessionEnded && s.fw === 'WORK_MODE'
-  const checkHint = s.sessionEnded ? 'Sesi dihentikan.'
-    : !online ? 'Hubungkan kacamata untuk mengukur.'
-    : baselineStale ? `Akan dibandingkan dengan baseline tanggal ${s.baseline.dateKey}.`
+  const checkHint = s.sessionEnded ? 'Sesi dihentikan'
+    : !online ? 'Hubungkan kacamata untuk mengukur'
+    : baselineStale ? `Akan dibandingkan dengan baseline tanggal ${s.baseline.dateKey}`
     : null
   const answerYes = async () => {
     setAsking(true)
@@ -175,8 +175,8 @@ function App() {
     <Frame tab="home" onNavigate={setTab} notifications={notifications} status={status} banner={banner}>
       <section className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="m-0 text-2xl md:text-[28px] font-extrabold tracking-tight">Beranda</h1>
-          <p className="mt-1 text-sm text-ink-muted">Pantauan langsung sensor VisioGuard.</p>
+          <h1 className="m-0 text-2xl md:text-page-title font-semibold">Beranda</h1>
+          <p className="mt-1 text-sm text-ink-muted">Jarak layar, postur kepala, dan waktu kerja dari kacamata VisioGuard</p>
         </div>
         {controls}
       </section>
@@ -188,7 +188,7 @@ function App() {
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-5">
         <div className="flex flex-col gap-5">
-          <StatusCard connected={online && !simulate} simulating={online && simulate} battery={undefined} />
+          <StatusCard connected={online && !simulate} simulating={online && simulate} />
           <TofReadings
             tof={tofView}
             live={showWork}

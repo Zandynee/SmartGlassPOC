@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────
-//  icons.jsx  –  tiny inline SVG icon set (stroke icons, 24×24 grid)
+//  icons.jsx  –  tiny inline SVG icon set (stroke icons, 24×24 grid, 1.5 stroke)
 //  No icon library needed; every icon inherits `currentColor`.
 // ─────────────────────────────────────────────
 
-function Icon({ size = 20, children, ...rest }) {
+function Icon({ size = 18, children, ...rest }) {
   return (
     <svg
       width={size}
@@ -11,7 +11,7 @@ function Icon({ size = 20, children, ...rest }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

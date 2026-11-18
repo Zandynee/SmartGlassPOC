@@ -51,10 +51,8 @@ export function DailyLogs({ sessions, histories, selectedId, onOpen, loading }) 
                  max-lg:max-h-overlay"
     >
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
-        <h2 className="m-0 text-lg font-extrabold">Log Harian</h2>
-        <span className="px-2.5 py-0.5 rounded-full bg-brand-soft text-brand text-xs font-bold">
-          {sessions.length} sesi
-        </span>
+        <h2 className="m-0 text-lg font-semibold">Log Harian</h2>
+        <span className="font-mono text-xs text-ink-muted tabular-nums">{sessions.length} sesi</span>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-4">
@@ -66,11 +64,11 @@ export function DailyLogs({ sessions, histories, selectedId, onOpen, loading }) 
 
         {groups.map((g) => (
           <section key={g.key} className="mb-3">
-            <h3 className="sticky top-0 z-raised m-0 px-2 py-1.5 bg-white/95 text-caption font-bold uppercase tracking-wide text-ink-faint">
+            <h3 className="sticky top-0 z-raised m-0 px-2 py-2 bg-white text-xs font-medium text-ink-muted">
               {g.heading}
             </h3>
 
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col gap-1">
               {g.items.map((s) => {
                 const h = histories[s.id]
                 const stats = h ? summarizeHistory(h) : null
@@ -85,15 +83,15 @@ export function DailyLogs({ sessions, histories, selectedId, onOpen, loading }) 
                     <button
                       onClick={() => onOpen(s)}
                       aria-label={`Buka sesi ${s.id}`}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left cursor-pointer transition-colors border ${
+                      className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left cursor-pointer transition-colors border ${
                         selected
-                          ? 'bg-brand-soft border-brand'
+                          ? 'bg-wash border-line-strong'
                           : 'border-transparent hover:bg-mist hover:border-line'
                       }`}
                     >
                       <span
-                        className={`shrink-0 grid place-items-center size-touch rounded-full ${
-                          sim ? 'bg-warning-tint text-warning' : 'bg-brand-soft text-brand'
+                        className={`shrink-0 grid place-items-center size-touch rounded-lg ${
+                          'bg-wash text-ink-soft'
                         }`}
                       >
                         <Icon size={18} />
@@ -101,7 +99,7 @@ export function DailyLogs({ sessions, histories, selectedId, onOpen, loading }) 
 
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
-                          <span className="truncate text-sm font-bold">
+                          <span className="truncate text-sm font-medium">
                             Sesi #{s.id} · {modeLabel(s.mode)}
                           </span>
                           {running && (
@@ -118,7 +116,7 @@ export function DailyLogs({ sessions, histories, selectedId, onOpen, loading }) 
                         </span>
                       </span>
 
-                      <ChevronRight size={18} className="shrink-0 text-ink-faint" />
+                      <ChevronRight size={18} className="shrink-0 text-ink-muted" />
                     </button>
                   </li>
                 )

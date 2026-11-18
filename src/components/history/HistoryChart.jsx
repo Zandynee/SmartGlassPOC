@@ -89,7 +89,7 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 pb-3">
         <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
           {metrics.map((m) => (
-            <li key={m.id} className="inline-flex items-center gap-2 text-label font-semibold">
+            <li key={m.id} className="inline-flex items-center gap-2 text-label font-medium">
               <span className="inline-block w-key-length h-stroke rounded-full" style={{ background: m.color }} />
               {m.label}
               <span className="font-normal text-ink-muted">({m.unit})</span>
@@ -129,7 +129,7 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
               const yBot = yOf(lo)
               return (
                 <g key={z.label}>
-                  <rect x={PAD.l} y={yTop} width={innerW} height={yBot - yTop} fill={z.color} opacity="0.13" />
+                  <rect x={PAD.l} y={yTop} width={innerW} height={yBot - yTop} fill={z.color} opacity="0.08" />
                   {z.from > d0 && (
                     <line
                       x1={PAD.l} x2={PAD.l + innerW}
@@ -147,13 +147,13 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
               return (
                 <g key={v}>
                   <line x1={PAD.l} x2={PAD.l + innerW} y1={y} y2={y} className="stroke-ink-ghost/70" />
-                  <text x={PAD.l - 10} y={y} textAnchor="end" dominantBaseline="central" fontSize="12" className="fill-ink-muted">
+                  <text x={PAD.l - 10} y={y} textAnchor="end" dominantBaseline="central" fontSize="12" className="fill-ink-muted font-mono">
                     {v}
                   </text>
                 </g>
               )
             })}
-            <text x={PAD.l - 10} y={PAD.t - 16} textAnchor="end" fontSize="11" fontWeight="700" className="fill-ink-soft">
+            <text x={PAD.l - 10} y={PAD.t - 16} textAnchor="end" fontSize="12" fontWeight="500" className="fill-ink-soft font-mono">
               {axisUnit}
             </text>
 
@@ -162,7 +162,7 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
             {xTicks.map((i) => (
               <g key={i}>
                 <line x1={xOf(i)} x2={xOf(i)} y1={PAD.t + innerH} y2={PAD.t + innerH + 5} className="stroke-ink-faint" />
-                <text x={xOf(i)} y={PAD.t + innerH + 20} textAnchor="middle" fontSize="12" className="fill-ink-muted">
+                <text x={xOf(i)} y={PAD.t + innerH + 20} textAnchor="middle" fontSize="12" className="fill-ink-muted font-mono">
                   {formatBucketLabel(unit, points[i].t0)}
                 </text>
               </g>
@@ -180,7 +180,7 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
                         d={seg.map((i, k) => `${k ? 'L' : 'M'}${xOf(i).toFixed(1)},${yOf(points[i].values[m.id]).toFixed(1)}`).join('')}
                         fill="none"
                         stroke={m.color}
-                        strokeWidth="2.5"
+                        strokeWidth="2"
                         strokeLinejoin="round"
                         strokeLinecap="round"
                       />
@@ -229,21 +229,21 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
         {/* tooltip */}
         {hp && (
           <div
-            className="absolute z-sticky pointer-events-none rounded-xl bg-ink text-white shadow-xl px-3 py-2 text-xs min-w-tooltip"
+            className="absolute z-sticky pointer-events-none rounded-lg bg-ink text-white shadow-float px-3 py-2 text-xs min-w-tooltip"
             style={{
               top: PAD.t + 6,
               left: tipFlip ? xOf(hover) - 12 : xOf(hover) + 12,
               transform: tipFlip ? 'translateX(-100%)' : undefined,
             }}
           >
-            <p className="font-bold mb-1.5 text-hairline">{formatBucketRange(unit, hp)}</p>
+            <p className="font-medium mb-2 text-hairline">{formatBucketRange(unit, hp)}</p>
             {metrics.map((m) => (
               <p key={m.id} className="flex items-center justify-between gap-4 leading-relaxed">
-                <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-2">
                   <span className="inline-block size-dot-sm rounded-full" style={{ background: m.color }} />
                   {m.label}
                 </span>
-                <span className="font-bold tabular-nums">
+                <span className="font-mono font-medium tabular-nums">
                   {hp.values[m.id] == null ? '—' : `${formatValue(hp.values[m.id], m.decimals)} ${m.unit}`}
                 </span>
               </p>
@@ -254,8 +254,8 @@ export function HistoryChart({ points, unit, metrics, loading = false }) {
         {/* empty / loading overlay */}
         {!hasData && (
           <div className="absolute inset-0 grid place-items-center pointer-events-none">
-            <div className="rounded-2xl bg-white/90 border border-line px-5 py-3 text-center shadow-sm">
-              <p className="text-sm font-bold">
+            <div className="rounded-xl bg-white border border-line px-5 py-3 text-center shadow-sm">
+              <p className="text-sm font-medium">
                 {loading ? 'Memuat data…' : 'Belum ada data pada rentang ini'}
               </p>
               {!loading && (

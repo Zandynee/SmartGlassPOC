@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────
 
 import { Card } from './Card'
+import { CheckIcon } from './icons'
 import { Btn } from './Btn'
 import { WindowDots } from './WindowDots'
 import { PpgScope } from './PpgScope'
@@ -31,9 +32,9 @@ const POSTURE_ERRORS = {
 
 function Part({ n, active, done, children }) {
   return (
-    <div className={`flex items-center gap-2 text-sm font-semibold ${active ? 'text-brand-strong' : done ? 'text-ok' : 'text-ink-faint'}`}>
+    <div className={`flex items-center gap-2 text-sm font-semibold ${active ? 'text-brand-strong' : done ? 'text-ok' : 'text-ink-muted'}`}>
       <span className={`size-step rounded-full grid place-items-center text-xs text-white ${active ? 'bg-primary' : done ? 'bg-ok-solid' : 'bg-ink-ghost'}`}>
-        {done ? '✓' : n}
+        {done ? <CheckIcon size={12} /> : n}
       </span>
       {children}
     </div>
@@ -44,7 +45,7 @@ function Metric({ label, value, unit }) {
   return (
     <div className="rounded-xl bg-tint border border-line p-3 text-center">
       <div className="text-caption font-semibold text-ink-muted">{label}</div>
-      <div className="text-xl font-extrabold text-ink-strong tabular-nums">
+      <div className="text-xl font-semibold text-ink-strong tabular-nums">
         {Number.isFinite(value) ? value.toFixed(label === 'HR' ? 0 : 1) : '—'}
         <span className="text-xs font-semibold text-ink-muted ml-1">{unit}</span>
       </div>
@@ -100,9 +101,9 @@ export function BaselineWizard({ g }) {
                 <button
                   key={f.v}
                   onClick={() => session.answerFitness(f.v)}
-                  className="w-24 rounded-xl border border-line bg-white px-2 py-2 text-center hover:bg-brand-soft cursor-pointer"
+                  className="w-24 rounded-xl border border-line bg-white px-2 py-2 text-center hover:bg-wash cursor-pointer"
                 >
-                  <div className="text-xl font-extrabold text-ink-strong">{f.v}</div>
+                  <div className="text-xl font-semibold text-ink-strong">{f.v}</div>
                   <div className="text-caption text-ink-muted leading-tight">{f.label}</div>
                 </button>
               ))}
@@ -248,7 +249,7 @@ export function BaselineWizard({ g }) {
           <Btn kind="secondary" onClick={() => session.cancelRebase()}>Batal</Btn>
         </div>
       )}
-      <p className="text-xs text-ink-faint m-0 mt-2">
+      <p className="text-xs text-ink-muted m-0 mt-2">
         Dashboard terbuka setelah kedua bagian tersimpan. Data hanya disimpan di komputer ini. {NOT_MEDICAL}
       </p>
     </Card>
@@ -258,7 +259,7 @@ export function BaselineWizard({ g }) {
 function Step({ title, text, children }) {
   return (
     <>
-      <h3 className="m-0 text-lg font-extrabold text-ink-strong">{title}</h3>
+      <h3 className="m-0 text-lg font-semibold text-ink-strong">{title}</h3>
       {text && <p className="m-0 text-sm text-ink-muted max-w-md">{text}</p>}
       {children}
     </>
@@ -278,7 +279,7 @@ function Notice({ title, tone = 'info', children }) {
   const c = tone === 'warn' ? 'bg-warning-surface border-warning-line text-warning-deep' : 'bg-info-surface border-info-line text-info-strong'
   return (
     <div className={`rounded-xl border px-4 py-3 text-sm text-left max-w-md ${c}`}>
-      {title && <div className="font-bold mb-0.5">{title}</div>}
+      {title && <div className="font-medium mb-0.5">{title}</div>}
       {children}
     </div>
   )
