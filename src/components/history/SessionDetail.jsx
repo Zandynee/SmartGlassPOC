@@ -36,16 +36,16 @@ const fmtTime = (ms) => (ms ? new Date(ms).toLocaleTimeString('id-ID') : '—')
 function ReadingsTable({ title, rows, columns }) {
   return (
     <div>
-      <p className="text-sm font-bold mb-1.5">
-        {title} <span className="font-normal text-ink-faint">· {rows.length.toLocaleString('id-ID')} baris</span>
+      <p className="text-sm font-medium mb-2">
+        {title} <span className="font-normal text-ink-muted">· {rows.length.toLocaleString('id-ID')} baris</span>
       </p>
       {!rows.length ? (
-        <p className="text-xs font-mono text-ink-faint">Tidak ada data.</p>
+        <p className="text-xs font-mono text-ink-muted">Tidak ada data.</p>
       ) : (
         <div className="overflow-auto max-h-table border border-line rounded-xl bg-white">
           <table className="w-full text-xs font-mono">
             <thead className="sticky top-0">
-              <tr className="bg-brand-soft">
+              <tr className="bg-wash">
                 {columns.map((c) => (
                   <th key={c.key} className="text-left px-2 py-1 whitespace-nowrap">{c.label}</th>
                 ))}
@@ -66,7 +66,7 @@ function ReadingsTable({ title, rows, columns }) {
         </div>
       )}
       {rows.length > MAX_ROWS && (
-        <p className="mt-1 text-caption text-ink-faint">
+        <p className="mt-1 text-caption text-ink-muted">
           Menampilkan {MAX_ROWS} dari {rows.length.toLocaleString('id-ID')} baris.
         </p>
       )}
@@ -131,15 +131,16 @@ export function SessionDetail({ session, history, onClose, onDeleted }) {
         role="dialog"
         aria-modal="true"
         aria-label={`Sesi ${session.id}`}
-        className="w-full max-w-4xl max-h-modal overflow-y-auto rounded-3xl bg-sheet shadow-2xl"
+        className="w-full max-w-4xl max-h-modal overflow-y-auto rounded-2xl bg-sheet shadow-float"
       >
         {/* header */}
-        <div className="sticky top-0 z-sticky flex items-start justify-between gap-4 px-6 py-4 bg-sheet/95 backdrop-blur border-b border-line">
+        <div className="sticky top-0 z-sticky flex items-start justify-between gap-4 px-6 py-4 bg-sheet border-b border-line">
           <div>
-            <h2 className="m-0 text-xl font-extrabold">
+            <h2 className="m-0 text-xl font-semibold">
               Sesi #{session.id} · {modeLabel(session.mode)}
               {!session.ended_at && (
-                <span className="ml-2 align-middle px-2 py-0.5 rounded-full bg-ok-tint text-ok-strong text-xs font-bold">
+                <span className="ml-3 inline-flex items-center gap-2 align-middle text-xs font-medium text-ok-strong">
+                  <span className="size-dot-sm rounded-full bg-ok-solid" />
                   Berjalan
                 </span>
               )}
@@ -156,21 +157,21 @@ export function SessionDetail({ session, history, onClose, onDeleted }) {
               onClick={handleExport}
               disabled={busy || !hasRows}
               title={hasRows ? 'Simpan data sesi sebagai file CSV' : 'Belum ada data untuk diekspor'}
-              className="inline-flex items-center gap-1.5 h-control-md px-3.5 rounded-full border border-line-strong bg-white text-sm font-semibold text-brand hover:bg-brand-soft disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex items-center gap-2 h-control-md px-4 rounded-lg border border-line-strong bg-white text-sm font-semibold text-ink-medium hover:bg-wash disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               <DownloadIcon size={16} /> Ekspor CSV
             </button>
             <button
               onClick={handleDelete}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 h-control-md px-3.5 rounded-full border border-danger-line bg-white text-sm font-semibold text-danger hover:bg-danger-surface disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 h-control-md px-4 rounded-lg border border-danger-line bg-white text-sm font-semibold text-danger hover:bg-danger-surface disabled:opacity-50 cursor-pointer"
             >
               <TrashIcon size={16} /> Hapus
             </button>
             <button
               onClick={onClose}
               aria-label="Tutup"
-              className="grid place-items-center size-touch-md rounded-full hover:bg-hairline cursor-pointer"
+              className="grid place-items-center size-touch-md rounded-lg hover:bg-hairline cursor-pointer"
             >
               <CloseIcon size={18} />
             </button>
@@ -181,12 +182,9 @@ export function SessionDetail({ session, history, onClose, onDeleted }) {
           {/* mini summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {METRICS.map((m) => (
-              <div key={m.id} className="rounded-2xl bg-white border border-line px-4 py-3">
-                <p className="text-xs font-semibold text-ink-muted flex items-center gap-2">
-                  <span className="inline-block size-dot-sm rounded-full" style={{ background: m.color }} />
-                  {m.label}
-                </p>
-                <p className="mt-1 text-2xl font-extrabold tabular-nums">
+              <div key={m.id} className="rounded-xl bg-white border border-line px-4 py-3">
+                <p className="text-xs font-medium text-ink-muted">{m.label}</p>
+                <p className="mt-1 text-2xl font-medium tabular-nums">
                   {stats ? formatValue(stats[m.id], m.decimals) : '…'}
                   <span className="ml-1 text-sm font-semibold text-ink-muted">{m.unit}</span>
                 </p>

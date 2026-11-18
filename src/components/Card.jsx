@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────
 //  Card.jsx  –  shared card shell for the Beranda page
 //  Same look as the Data Riwayat cards: white, 1px blue-grey border,
-//  rounded-2xl, soft shadow, small grey title with a coloured dot.
+//  rounded-2xl, soft shadow, small grey title with an optional status dot.
 //
 //  Props:
 //    title     – card heading
@@ -17,7 +17,7 @@ export function Card({ title, dot, right, className = '', children }) {
     >
       {(title || right) && (
         <div className="flex items-center justify-between gap-2 mb-3">
-          <h2 className="m-0 flex items-center gap-2 text-sm font-bold text-ink-soft">
+          <h2 className="m-0 flex items-center gap-2 text-sm font-medium text-ink-soft">
             {dot && (
               <span className="inline-block size-dot rounded-full" style={{ background: dot }} />
             )}

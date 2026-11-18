@@ -48,14 +48,14 @@ export function CheckModeScreen({ g }) {
   if (!outcome) {
     const left = Math.ceil(totalS * (1 - progress))
     return (
-      <Card title="Cek kondisi" dot="#f59e0b" className="max-w-3xl mx-auto w-full">
+      <Card title="Cek kondisi" dot="#d98a1c" className="max-w-3xl mx-auto w-full">
         <div className="flex flex-col items-center gap-4 text-center py-4">
-          <h3 className="m-0 text-lg font-extrabold text-ink-strong">Mengukur… tahan diam</h3>
+          <h3 className="m-0 text-lg font-semibold text-ink-strong">Mengukur… tahan diam</h3>
           <p className="m-0 text-sm text-ink-muted max-w-md">
             Kacamata tetap di meja, ujung jari telunjuk menempel pada sensor dengan tekanan sedang.
             Jangan menggeser jari, jangan mengetuk meja.
           </p>
-          <RingProgress value={progress} color="#f59e0b" label={`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} sub="tersisa" />
+          <RingProgress value={progress} color="#d98a1c" label={`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} sub="tersisa" />
           <div className="w-full max-w-xl"><PpgScope session={session} contact={contact} /></div>
           <WindowDots total={nWin} windows={windows} progress={progress} />
           {!g.offline && !contact && <p className="m-0 text-sm font-semibold text-warning-strong">Jari terlepas. Tempel lagi dan tahan.</p>}
@@ -70,10 +70,10 @@ export function CheckModeScreen({ g }) {
   const cause = causeText(outcome.cause)
 
   return (
-    <Card title="Cek kondisi" dot={invalid ? '#94a3b8' : outcome.status === CHECK_STATUS.DROP ? '#f59e0b' : '#22c55e'} className="max-w-3xl mx-auto w-full">
+    <Card title="Cek kondisi" dot={invalid ? '#85857f' : outcome.status === CHECK_STATUS.DROP ? '#d98a1c' : '#2f9e6e'} className="max-w-3xl mx-auto w-full">
       <div className="flex flex-col items-center gap-4 text-center py-4">
         <div className={`rounded-2xl px-5 py-3 border max-w-md ${TONE[st.tone]}`}>
-          <div className="text-xl font-extrabold">{st.title}</div>
+          <div className="text-xl font-semibold">{st.title}</div>
           <div className="text-sm">{invalid ? (outcome.reason === 'no_baseline' ? 'Belum ada baseline hari ini.' : `${cause.msg} ${cause.tip}`) : st.text}</div>
         </div>
 
@@ -90,10 +90,10 @@ export function CheckModeScreen({ g }) {
             <tbody>
               {[['RMSSD', outcome.rmssd], ['SDNN', outcome.sdnn]].map(([label, m]) => (
                 <tr key={label} className="border-t border-line-faint">
-                  <td className="text-left py-1.5 font-semibold text-ink-medium">{label}</td>
+                  <td className="text-left py-2 font-semibold text-ink-medium">{label}</td>
                   <td className="tabular-nums">{ms(m.base)}</td>
                   <td className="tabular-nums">{ms(m.cur)}</td>
-                  <td className={`tabular-nums font-bold ${m.changePct <= -outcome.dropThr * 100 ? 'text-warning-strong' : 'text-ink-soft'}`}>
+                  <td className={`tabular-nums font-medium ${m.changePct <= -outcome.dropThr * 100 ? 'text-warning-strong' : 'text-ink-soft'}`}>
                     {pctText(m.changePct)}
                   </td>
                 </tr>
@@ -133,7 +133,7 @@ export function CheckModeScreen({ g }) {
           Akhiri sesi
         </button>
         {g.error && <p className="m-0 text-sm text-warning-strong">{g.error}</p>}
-        <p className="m-0 text-caption text-ink-faint max-w-md">{NOT_MEDICAL}</p>
+        <p className="m-0 text-caption text-ink-muted max-w-md">{NOT_MEDICAL}</p>
       </div>
     </Card>
   )

@@ -19,7 +19,7 @@ const SHOW_S = 8        // seconds on screen
 const SKIP_S = 1.5      // filter start-up transient, never drawn
 const FPS = 30
 
-const C = { bg: '#f8fafc', grid: '#e8eef9', axis: '#cbd5e1', line: '#2563eb', off: '#94a3b8', beat: '#f59e0b', text: '#64748b' }
+const C = { bg: '#f7f7f5', grid: '#e7e6e2', axis: '#d2d1cc', line: '#2563eb', off: '#85857f', beat: '#d98a1c', text: '#6a6a64' }
 
 export function PpgScope({ session, contact = true, height = 150 }) {
   const canvasRef = useRef(null)
@@ -76,7 +76,7 @@ export function PpgScope({ session, contact = true, height = 150 }) {
       const raw = scope.read()
       const skip = Math.round(SKIP_S * fs)
       const showN = Math.round(SHOW_S * fs)
-      ctx.font = '11px system-ui, sans-serif'
+      ctx.font = '12px "Geist Mono", ui-monospace, monospace'
       ctx.fillStyle = C.text
 
       if (!hasContact || raw.length < skip + fs) {

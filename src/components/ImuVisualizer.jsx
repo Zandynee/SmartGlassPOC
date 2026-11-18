@@ -26,7 +26,7 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
     // ── Scene, Camera, Renderer ──────────────────────────────
     const scene = new THREE.Scene()
     // CHANGED: 0xf5f5f5 → 0xf0f0f0 to match the grey of the mockup's avatar panel
-    scene.background = new THREE.Color(0xf0f0f0)
+    scene.background = new THREE.Color(0xefeeeb)
 
     const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100)
     camera.position.set(0, -0.2, 0.4)
@@ -68,7 +68,7 @@ export default function ImuVisualizer({ roll = 0, pitch = 0, yaw = 0 }) {
         obj.traverse((child) => {
           if (child.isMesh) {
             child.material = new THREE.MeshStandardMaterial({ 
-              color: 0x2196f3,
+              color: 0x2563eb,
               wireframe: true,
               transparent: true,
               opacity: 0.3

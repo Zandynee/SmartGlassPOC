@@ -41,6 +41,7 @@ import { DailyChecks } from './DailyChecks'
 import { flattenChecks } from '../../utils/dailySummary'
 import { DailyLogs } from './DailyLogs'
 import { SessionDetail } from './SessionDetail'
+import { CloseIcon } from '../icons'
 
 const startOfToday = () => {
   const d = new Date()
@@ -172,8 +173,8 @@ export function HistoryPage({ onNavigate, notifications = [], connected = false,
             />
 
             {error && (
-              <p className="text-sm font-mono text-danger border border-danger-line-strong bg-danger-surface rounded-xl px-4 py-2">
-                ✕ Gagal memuat riwayat: {error}
+              <p className="flex items-center gap-2 text-sm font-mono text-danger border border-danger-line-strong bg-danger-surface rounded-lg px-4 py-2">
+                <CloseIcon size={16} className="shrink-0" /> Gagal memuat riwayat: {error}
               </p>
             )}
 

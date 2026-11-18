@@ -2,18 +2,18 @@
 //  NotificationPanel.jsx  –  "Notifikasi" right sidebar
 //  Same shell as the Data Riwayat "Log Harian" sidebar
 //  (white, left border, sticky, full height). Newest-first list:
-//    info    → blue left border    (connection events)
-//    warning → yellow left border  (screen time, posture)
-//    danger  → red left border     (fatigue)
+//    info    → blue dot    (connection events)
+//    warning → amber dot   (screen time, posture)
+//    danger  → red dot     (fatigue)
 //
 //  Props:
 //    items – [{ id, level, message, at }]  (see hooks/useNotifications)
 // ─────────────────────────────────────────────
 
-const LEVEL_BORDER = {
-  info:    'border-l-info',
-  warning: 'border-l-caution',
-  danger:  'border-l-alert',
+const LEVEL_DOT = {
+  info:    'bg-info',
+  warning: 'bg-caution',
+  danger:  'bg-alert',
 }
 
 // 1765000000000 → "18:14, 6 Juni"   (also used by HistoryTopBar)
@@ -33,10 +33,8 @@ export function NotificationPanel({ items }) {
                  max-lg:max-h-overlay"
     >
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
-        <h2 className="m-0 text-lg font-extrabold">Notifikasi</h2>
-        <span className="px-2.5 py-0.5 rounded-full bg-brand-soft text-brand text-xs font-bold">
-          {items.length}
-        </span>
+        <h2 className="m-0 text-lg font-semibold">Notifikasi</h2>
+        <span className="font-mono text-xs text-ink-muted tabular-nums">{items.length}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-4">
@@ -46,16 +44,14 @@ export function NotificationPanel({ items }) {
 
         <ul className="flex flex-col gap-2">
           {items.map((n) => (
-            <li
-              key={n.id}
-              className={`rounded-xl border border-line border-l-4 bg-white px-3 py-2.5 ${
-                LEVEL_BORDER[n.level] ?? LEVEL_BORDER.info
-              }`}
-            >
-              <p className="m-0 text-label font-semibold leading-snug">{n.message}</p>
-              <time className="block mt-1 text-right text-caption font-bold text-ink-muted tabular-nums">
-                {fmtStamp(n.at)}
-              </time>
+            <li key={n.id} className="flex items-start gap-3 rounded-xl border border-line bg-white px-3 py-3">
+              <span className={`mt-2 shrink-0 size-dot-sm rounded-full ${LEVEL_DOT[n.level] ?? LEVEL_DOT.info}`} />
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-label font-medium leading-snug">{n.message}</p>
+                <time className="block mt-1 font-mono text-caption text-ink-muted tabular-nums">
+                  {fmtStamp(n.at)}
+                </time>
+              </div>
             </li>
           ))}
         </ul>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────
@@ -10,81 +10,93 @@
    so components say what a value MEANS instead of what it measures.
    ───────────────────────────────────────────── */
 @theme {
-  /* brand */
-  --color-brand: #3391ff;
-  --color-brand-soft: #cde0ff;
+  /* fonts: Geist for the interface, Geist Mono for figures and meta */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, Consolas, monospace;
+
+  /* one easing curve and one default duration for every transition */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* brand: the blue of the VG logo, used only for the primary action, the active tab and the plotted line */
+  --color-brand: #2563eb;
+  --color-brand-soft: #e9effd;
   --color-brand-strong: #1d4ed8;
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
 
-  /* surfaces & lines */
-  --color-page: #eef4ff;
-  --color-sheet: #f4f8ff;
-  --color-tint: #f5f9ff;
-  --color-line: #dbe6f7;
-  --color-line-strong: #c9d9f2;
-  --color-line-faint: #e8eef9;
-  --color-backdrop: rgb(15 23 42 / 0.45);
+  /* surfaces & lines: one warm-neutral ramp, hairlines at ~8% of the text colour */
+  --color-page: #f7f7f5;
+  --color-sheet: #fafaf9;
+  --color-tint: #f4f4f2;
+  --color-line: #e7e6e2;
+  --color-line-strong: #d8d7d2;
+  --color-line-faint: #eeede9;
+  --color-backdrop: rgb(20 20 19 / 0.4);
 
-  /* text & neutral greys (slate 900 → 300, then light surfaces) */
-  --color-ink: #0f172a;
-  --color-ink-strong: #1e293b;
-  --color-ink-medium: #334155;
-  --color-ink-soft: #475569;
-  --color-ink-muted: #64748b;
-  --color-ink-faint: #94a3b8;
-  --color-ink-ghost: #cbd5e1;
-  --color-hairline: #e2e8f0;
-  --color-wash: #f1f5f9;
-  --color-mist: #f8fafc;
+  /* text roles: primary (ink) · secondary (ink-soft) · muted (ink-muted, meta only) */
+  --color-ink: #141413;
+  --color-ink-strong: #1c1c1a;
+  --color-ink-medium: #3b3b38;
+  --color-ink-soft: #55554f;
+  --color-ink-muted: #6a6a64;
+  --color-ink-faint: #85857f;
+  --color-ink-ghost: #d2d1cc;
+  --color-hairline: #e9e8e4;
+  --color-wash: #efeeeb;
+  --color-mist: #f7f7f5;
 
-  /* notification levels */
-  --color-info: #2f8cff;
-  --color-caution: #ffd400;
-  --color-alert: #ff3b3b;
+  /* notification levels (a small dot, not a coloured border) */
+  --color-info: #2563eb;
+  --color-caution: #d98a1c;
+  --color-alert: #d9453f;
 
-  /* status: ok / warning / danger / info */
-  --color-ok: #16a34a;
-  --color-ok-strong: #047857;
-  --color-ok-deep: #065f46;
-  --color-ok-solid: #10b981;
-  --color-ok-tint: #d1fae5;
-  --color-ok-surface: #ecfdf5;
-  --color-ok-line: #a7f3d0;
-  --color-ok-line-strong: #6ee7b7;
+  /* status: ok / warning / danger / info, toned down to sit inside the ramp */
+  --color-ok: #1f8a5b;
+  --color-ok-strong: #1a7a50;
+  --color-ok-deep: #16603f;
+  --color-ok-solid: #2f9e6e;
+  --color-ok-tint: #e3f2ea;
+  --color-ok-surface: #f2f8f4;
+  --color-ok-line: #cfe6d9;
+  --color-ok-line-strong: #a9d3bf;
 
-  --color-warning: #d97706;
-  --color-warning-strong: #b45309;
-  --color-warning-deep: #92400e;
-  --color-warning-solid: #f59e0b;
-  --color-warning-bright: #fbbf24;
-  --color-warning-tint: #fef3c7;
-  --color-warning-surface: #fffbeb;
-  --color-warning-line: #fde68a;
+  --color-warning: #b9731a;
+  --color-warning-strong: #9a5f12;
+  --color-warning-deep: #7a4a0e;
+  --color-warning-solid: #d98a1c;
+  --color-warning-bright: #e0a030;
+  --color-warning-tint: #f6ecd9;
+  --color-warning-surface: #fbf6ec;
+  --color-warning-line: #ecdcbc;
 
-  --color-danger: #dc2626;
-  --color-danger-strong: #b91c1c;
-  --color-danger-surface: #fef2f2;
-  --color-danger-line: #fecaca;
-  --color-danger-line-strong: #fca5a5;
+  --color-danger: #c93a34;
+  --color-danger-strong: #a82e29;
+  --color-danger-solid: #d9453f;
+  --color-danger-surface: #fbf1f0;
+  --color-danger-line: #efcfcc;
+  --color-danger-line-strong: #e3aeaa;
 
   --color-info-strong: #1e40af;
-  --color-info-surface: #eff6ff;
-  --color-info-line: #bfdbfe;
+  --color-info-surface: #f0f4fe;
+  --color-info-line: #c9d6f7;
 
-  /* type scale */
-  --text-micro: 0.625rem;          /* 10px – tiny counters */
+  /* depth: neutral and small; floating things get one soft shadow */
+  --shadow-float: 0 8px 24px rgb(20 20 19 / 0.08);
+
+  /* type scale (nothing under 12px) */
+  --text-micro: 0.75rem;           /* 12px – tiny counters */
   --text-micro--line-height: 1;
-  --text-caption: 0.6875rem;       /* 11px – timestamps, group headings */
-  --text-caption--line-height: 1.25;
+  --text-caption: 0.75rem;         /* 12px – timestamps, group headings */
+  --text-caption--line-height: 1.35;
   --text-label: 0.8125rem;         /* 13px – list rows, legend */
-  --text-label--line-height: 1.35;
+  --text-label--line-height: 1.4;
   --text-nav: 0.9375rem;           /* 15px – top-bar tabs */
   --text-nav--line-height: 1.4;
   --text-page-title: 1.75rem;      /* 28px – page headings */
   --text-page-title--line-height: 1.2;
 
-  /* radii */
+  /* radii: tag 4 · control 8 · card 16 · panel 16 */
   --radius-chip: 4px;
 
   /* sizes (work for w-, h-, size-, min-w-, max-h-, top-, …) */
@@ -100,12 +112,11 @@
   --spacing-spinner: 1rem;
   --spacing-dot: 0.625rem;                         /* status dot */
   --spacing-dot-sm: 0.5rem;
-  --spacing-bar: 0.625rem;                         /* progress-bar thickness */
+  --spacing-bar: 0.5rem;                           /* progress-bar thickness */
   --spacing-key-box: 0.875rem;                     /* legend colour box */
   --spacing-key-length: 1.25rem;                   /* legend line sample */
-  --spacing-stroke: 3px;                           /* underline / legend-line thickness */
-  --spacing-count-badge: 1.125rem;                 /* unread counter bubble */
-  --spacing-battery-ring: 5.5rem;
+  --spacing-stroke: 2px;                           /* underline / legend-line thickness */
+  --spacing-count-badge: 1.25rem;                 /* unread counter bubble */
   --spacing-dropdown: 3rem;                        /* offset of dropdowns under a button */
   --spacing-popover: 20rem;
   --spacing-menu: 13.75rem;
@@ -138,111 +149,83 @@
 @utility z-header   { z-index: 30; }
 @utility z-modal    { z-index: 50; }
 
-:root {
-  /* ── Existing tokens (kept so SessionHistory / Controls keep working) ── */
-  --text: #3f3a48;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  /* ── New design tokens sampled from the mockup ── */
-  --vg-tab-active: #3391ff;
-  --vg-tab-idle: #d2e5ff;
-  --vg-blue: #3a8dff;
-  --vg-blue-soft: #cde0ff;
-  --vg-green: #0a7a0a;
-  --vg-green-bg: #ccf8d9;
-  --vg-green-border: #6cc47e;
-  --vg-yellow-bg: #fdf6d8;
-  --vg-yellow-border: #d9b92a;
-  --vg-gray-card: #eeeeee;
-  --vg-red: #ff3b3b;
-
-  --sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 16px/145% var(--sans);
-  letter-spacing: 0;
-  /* The mockup is light-only. Dark mode block was removed on purpose,
-     otherwise the pastel cards would get unreadable light-grey text. */
-  color-scheme: light;
-  color: var(--text-h);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  margin: 0;
-}
-
-/* Full-width canvas instead of the old 1126px centred column with side borders */
-#root {
-  width: 100%;
-  min-height: 100svh;
-  box-sizing: border-box;
-}
-
-/* Page background: strong blue under the tabs → white → soft blue at the bottom */
-.vg-page {
-  min-height: 100svh;
-  background: linear-gradient(
-    180deg,
-    #9cc9ff 0%,
-    #ffffff 24%,
-    #cfe2ff 62%,
-    #bcd6ff 100%
-  );
-}
-
-/* In @layer base so Tailwind utilities (text-*, font-*, mb-*) on headings win */
 @layer base {
+  :root {
+    font: 16px/1.45 var(--font-sans);
+    letter-spacing: 0;
+    /* light-only on purpose: status colours are tuned for a light surface */
+    color-scheme: light;
+    color: var(--color-ink);
+    background: var(--color-page);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+  }
+
   h1,
   h2 {
-    font-family: var(--heading);
-    font-weight: 700;
-    color: var(--text-h);
+    font-weight: 600;
+    color: var(--color-ink);
   }
 
   h1 {
     font-size: 56px;
-    letter-spacing: -1.68px;
+    letter-spacing: -0.03em;
     margin: 32px 0;
   }
 
   h2 {
     font-size: 24px;
     line-height: 118%;
-    letter-spacing: -0.24px;
     margin: 0; /* spacing is set per card with Tailwind utilities */
   }
+
+  /* hover, press and keyboard focus for every button, inside the palette */
+  button {
+    transition-property: color, background-color, border-color, opacity, transform;
+  }
+  button:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Full-width canvas */
+#root {
+  width: 100%;
+  min-height: 100svh;
+  box-sizing: border-box;
 }
 
 p {
   margin: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
+code {
+  font-family: var(--font-mono);
   display: inline-flex;
   border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
+  color: var(--color-ink);
   font-size: 15px;
   line-height: 135%;
   padding: 4px 8px;
-  background: var(--code-bg);
+  background: var(--color-wash);
 }
